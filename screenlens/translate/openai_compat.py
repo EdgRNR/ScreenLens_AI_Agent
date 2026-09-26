@@ -28,6 +28,10 @@ class OpenAICompatProvider(TranslationProvider):
         self.api_key = cfg.get("api_key") or ""
         self.model = cfg.get("model") or "gpt-4o-mini"
 
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.base_url) and bool(self.api_key)
+
     def translate(self, text: str, target_lang: str) -> str:
         text = (text or "").strip()
         if not text:

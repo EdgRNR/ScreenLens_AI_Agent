@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""系统托盘图标（pystray）。"""
+"""系统托盘图标（pystray）。
+
+注意：pystray 菜单回调在托盘线程执行，一律通过 app.post()
+投递到 Tk 主线程，不在回调中直接操作 Tk。
+"""
 import logging
 
 from PIL import Image, ImageDraw
@@ -24,22 +28,26 @@ def make_menu(app):
     import pystray
 
     def _capture(icon, item):
-        app.request_capture()
+        app.post(app.request_capture)
+
+    def _settings(icon, item):
+        app.post(app.open_settings)
 
     def _open_config(icon, item):
-        app.open_config_file()
+        app.post(app._open_config_file_impl)
 
     def _reload(icon, item):
-        app.reload_config()
+        app.post(app._reload_config_impl)
 
     def _about(icon, item):
-        app.show_about()
+        app.post(app.show_about)
 
     def _quit(icon, item):
-        app.quit()
+        app.post(app.quit)
 
     return pystray.Menu(
         pystray.MenuItem("截图（全局快捷键）", _capture, default=True),
+        pystray.MenuItem("设置…", _settings),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(lambda item: f"快捷键：{app.hotkey_display}",
                          None, enabled=False),

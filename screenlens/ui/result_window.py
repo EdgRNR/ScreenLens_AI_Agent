@@ -1,9 +1,18 @@
 # -*- coding: utf-8 -*-
 """OCR 结果浮窗：轻量、无边框、置顶，出现在选区旁边。
 
-功能：识别文字（可编辑）、一键复制、翻译（可选目标语言）、重新截图、关闭。
-OCR 与翻译都在后台线程执行，不阻塞 UI。
+线程模型：
+- OCR 与翻译在工作线程执行，结果通过 queue 投递，
+  由主线程 _poll_queue 统一消费；
+- 每次新任务（show_ocr / 重新翻译）携带递增的 task id，
+  旧任务的迟到结果会被丢弃，不会覆盖新界面；
+- 翻译请求进行中禁止重复提交，所有结束路径都会恢复按钮状态。
+
+隐私：OCR 完全本地；仅当用户点击"翻译"时，
+识别文本（而非截图）会发送给所选在线服务，状态栏会明确提示。
 """
+import gc
+import logging
 import queue
 import threading
 import tkinter as tk
@@ -11,12 +20,14 @@ import tkinter.ttk as ttk
 
 from screenlens.capture import screen as screen_util
 from screenlens.capture.region import upscale_for_ocr
-from screenlens.ocr.engine import OcrEngine, OcrError
+from screenlens.ocr.engine import OcrError
 from screenlens.translate.provider import (
     LANG_NAMES,
     TranslationError,
     get_provider,
 )
+
+logger = logging.getLogger(__name__)
 
 BG = "#1e1f24"
 BG_PANEL = "#26272e"
@@ -31,8 +42,7 @@ TRANS_EXTRA = 140       # 展示翻译结果后增加的高度
 
 
 class ResultWindow:
-    def __init__(self, root: tk.Tk, ocr_engine: OcrEngine, config,
-                 on_recapture):
+    def __init__(self, root: tk.Tk, ocr_engine, config, on_recapture):
         self._root = root
         self._ocr = ocr_engine
         self._config = config
@@ -41,6 +51,9 @@ class ResultWindow:
         self._queue: queue.Queue = queue.Queue()
         self._poll_after_id = None
         self._provider = None
+        self._task_gen = 0            # 任务代际号：新任务递增，旧结果作废
+        self._translating = False    # 翻译请求进行中（防重复提交）
+        self._has_text = False       # 当前是否有可翻译的识别文本
         self._reload_provider()
 
     # ----------------------------------------------------------------- API
@@ -49,6 +62,7 @@ class ResultWindow:
         self._provider = get_provider(self._config.translation)
 
     def reload_config(self):
+        """设置保存后调用：立即应用新的翻译配置。"""
         self._reload_provider()
 
     def is_shown(self) -> bool:
@@ -63,28 +77,40 @@ class ResultWindow:
                 pass
 
     def show_ocr(self, crop, screen_bbox):
-        """对截图运行 OCR 并展示结果。"""
+        """对截图运行 OCR 并展示结果（主线程调用）。"""
         self._build_window(screen_bbox)
         self._set_status("识别中…")
+        task = self._task_gen
         threading.Thread(
-            target=self._run_ocr, args=(crop,), daemon=True,
+            target=self._run_ocr, args=(task, crop), daemon=True,
             name="ocr-worker").start()
 
     # ---------------------------------------------------------------- OCR
 
-    def _run_ocr(self, crop):
+    def _run_ocr(self, task: int, crop):
+        """工作线程：识别并投递结果。"""
         try:
             result = self._ocr.recognize(upscale_for_ocr(crop))
-            self._queue.put(("ocr_ok", result))
+            self._queue.put({"task": task, "kind": "ocr_ok",
+                             "payload": result})
         except OcrError as e:
-            self._queue.put(("ocr_err", str(e)))
+            self._queue.put({"task": task, "kind": "ocr_err",
+                             "payload": str(e)})
+        except Exception as e:  # 未预期异常也要反馈，不让浮窗卡在"识别中"
+            logger.exception("unexpected OCR worker error (%s)",
+                             type(e).__name__)
+            self._queue.put({"task": task, "kind": "ocr_err",
+                            "payload": "识别失败，请重试或重新截图。"})
 
     # ------------------------------------------------------------ UI build
 
     def _build_window(self, screen_bbox):
         self.hide()
-        if self._win is not None:
-            self._destroy_window()
+        self._destroy_window()
+        # 新一代任务：旧任务的所有排队结果作废
+        self._task_gen += 1
+        self._translating = False
+        self._has_text = False
 
         self._win = tk.Toplevel(self._root)
         self._win.overrideredirect(True)
@@ -115,7 +141,13 @@ class ResultWindow:
                              font=("Microsoft YaHei UI", 11), wrap="word",
                              height=6, padx=8, pady=6,
                              insertbackground=FG)
-        self._text.pack(fill="both", expand=True)
+        self._text.pack(side="left", fill="both", expand=True)
+        scrollbar = tk.Scrollbar(body, command=self._text.yview,
+                                  width=8, bg=BG_PANEL,
+                                  activebackground=FG_DIM,
+                                  troughcolor=BG_PANEL)
+        scrollbar.pack(side="right", fill="y")
+        self._text.configure(yscrollcommand=scrollbar.set)
 
         # ---- 译文区（翻译后显示）
         self._trans_frame = tk.Frame(self._win, bg=BG)
@@ -164,11 +196,7 @@ class ResultWindow:
         self._status.pack(fill="x", padx=12, pady=(0, 6))
 
         self._win.bind("<Escape>", lambda e: self.close())
-        self._win.bind("<FocusOut>", self._on_focus_out)
         self._start_polling()
-
-    def _on_focus_out(self, _e):
-        pass  # 失焦不自动关闭，避免误触丢失结果
 
     def _make_btn(self, parent, text, cmd, primary=False):
         bg = ACCENT if primary else BG_PANEL
@@ -200,20 +228,67 @@ class ResultWindow:
     # ------------------------------------------------------------- actions
 
     def _on_copy(self):
+        if not self._has_text:
+            self._set_status("没有可复制的文字。", error=True)
+            return
         self._copy_text(self._text.get("1.0", "end-1c"), "已复制到剪贴板")
 
     def _copy_text(self, text, msg):
         if not text:
             return
-        self._root.clipboard_clear()
-        self._root.clipboard_append(text)
+        try:
+            self._root.clipboard_clear()
+            self._root.clipboard_append(text)
+            # 校验剪贴板内容确实写入成功
+            if self._root.clipboard_get() != text:
+                raise tk.TclError("clipboard verify failed")
+        except tk.TclError:
+            self._set_status("复制失败，请重试。", error=True)
+            return
         self._set_status(msg)
 
     def _on_recapture_btn(self):
         self.close()
         self._on_recapture()
 
+    # ------------------------------------------------------------- 翻译
+
+    def _provider_hint(self, provider) -> str | None:
+        """根据 Provider 返回隐私提示；本地/未启用返回 None。"""
+        name = provider.name
+        if name == "none":
+            return None
+        if name == "openai":
+            base = getattr(provider, "base_url", "")
+            host = base.split("//", 1)[-1].split("/", 1)[0] if base else "服务"
+            return f"仅识别文本将发送至 {host}，截图不会上传"
+        if name == "google_free":
+            return "仅识别文本将发送至 Google 翻译接口，截图不会上传"
+        return "仅识别文本将发送至在线服务，截图不会上传"
+
     def _on_translate(self):
+        if self._translating:
+            self._set_status("翻译进行中，请稍候…")
+            return
+        if not self._has_text:
+            self._set_status("没有可翻译的文字。", error=True)
+            return
+
+        provider = self._provider
+        # 1) 未启用翻译
+        if provider.name == "none":
+            self._set_status(
+                "翻译未启用：请在托盘图标右键菜单打开「设置」，"
+                "选择翻译服务。", error=True)
+            return
+        # 2) OpenAI Provider 未配置
+        if provider.name == "openai" and not getattr(
+                provider, "is_configured", True):
+            self._set_status(
+                "当前未配置在线翻译服务：请在托盘菜单打开「设置」，"
+                "填写 OpenAI 兼容接口的 Base URL 与 API Key。", error=True)
+            return
+
         text = self._text.get("1.0", "end-1c").strip()
         if not text:
             self._set_status("没有可翻译的文字。", error=True)
@@ -221,20 +296,39 @@ class ResultWindow:
         lang_name = self._lang_var.get()
         target = next((k for k, v in LANG_NAMES.items() if v == lang_name),
                       "zh")
-        provider = self._provider
-        self._set_status(
-            f"翻译中…（文本将发送至在线服务：{provider.name}）")
-        self._btn_translate.configure(fg=FG_DIM)
+
+        hint = self._provider_hint(provider)
+        self._set_status(f"翻译中…（{hint}）")
+        self._set_translate_busy(True)
+        task = self._task_gen
 
         def work():
             try:
                 result = provider.translate(text, target)
-                self._queue.put(("trans_ok", result))
+                self._queue.put({"task": task, "kind": "trans_ok",
+                                "payload": result})
             except TranslationError as e:
-                self._queue.put(("trans_err", str(e)))
+                self._queue.put({"task": task, "kind": "trans_err",
+                                 "payload": str(e)})
+            except Exception as e:
+                logger.exception("unexpected translate worker error (%s)",
+                                 type(e).__name__)
+                self._queue.put({
+                    "task": task, "kind": "trans_err",
+                    "payload": "翻译失败，请检查网络或服务配置。"})
 
         threading.Thread(target=work, daemon=True,
                          name="translate-worker").start()
+
+    def _set_translate_busy(self, busy: bool):
+        """翻译请求进行中禁用按钮，结束后恢复。"""
+        self._translating = busy
+        btn = getattr(self, "_btn_translate", None)
+        if btn is not None and self._win is not None:
+            if busy:
+                btn.configure(fg="#5a6b75", cursor="arrow")
+            else:
+                btn.configure(fg="#08131a", cursor="hand2")
 
     # ------------------------------------------------------- queue polling
 
@@ -244,7 +338,11 @@ class ResultWindow:
     def _poll_queue(self):
         try:
             while True:
-                kind, payload = self._queue.get_nowait()
+                msg = self._queue.get_nowait()
+                if msg.get("task") != self._task_gen:
+                    continue  # 迟到的旧任务结果，直接丢弃
+                kind = msg.get("kind")
+                payload = msg.get("payload")
                 if kind == "ocr_ok":
                     self._handle_ocr(payload)
                 elif kind == "ocr_err":
@@ -252,6 +350,7 @@ class ResultWindow:
                 elif kind == "trans_ok":
                     self._handle_translation(payload)
                 elif kind == "trans_err":
+                    self._set_translate_busy(False)
                     self._set_status(payload, error=True)
         except queue.Empty:
             pass
@@ -269,6 +368,7 @@ class ResultWindow:
             self._btn_translate.configure(fg=FG_DIM)
             self._set_status("未识别到文字，可点击“重新截图”再试。")
             return
+        self._has_text = True
         self._text.delete("1.0", "end")
         self._text.insert("1.0", result.text)
         avg = sum(result.scores) / len(result.scores) if result.scores else 0
@@ -286,11 +386,11 @@ class ResultWindow:
     def _handle_translation(self, result):
         if self._win is None:
             return
-        self._btn_translate.configure(fg="#08131a")
+        self._set_translate_busy(False)
         self._trans_text.delete("1.0", "end")
         self._trans_text.insert("1.0", result)
         self._trans_frame.pack(fill="x", before=self._status)
-        # 窗口加高以容纳译文
+        # 窗口加高以容纳译文，并限制在虚拟桌面内
         x, y = self._win.winfo_x(), self._win.winfo_y()
         try:
             vs = screen_util.virtual_screen_bbox()
@@ -299,7 +399,7 @@ class ResultWindow:
         except Exception:
             pass
         self._win.geometry(f"{WINDOW_W}x{WINDOW_H + TRANS_EXTRA}+{x}+{y}")
-        self._set_status("翻译完成")
+        self._set_status("翻译完成，可点击译文右侧「复制」复制译文")
 
     # -------------------------------------------------------------- helper
 
@@ -316,9 +416,19 @@ class ResultWindow:
             return
         x = self._win.winfo_x() + event.x - self._drag_data["x"]
         y = self._win.winfo_y() + event.y - self._drag_data["y"]
+        # 拖动不允许跑出虚拟桌面边界
+        try:
+            vs = screen_util.virtual_screen_bbox()
+            x = max(vs["left"], min(x, vs["left"] + vs["width"] - WINDOW_W))
+            y = max(vs["top"], min(y, vs["top"] + vs["height"] - WINDOW_H))
+        except Exception:
+            pass
         self._win.geometry(f"+{x}+{y}")
 
     def _destroy_window(self):
+        # 使旧任务结果作废；取消轮询；销毁窗口
+        self._task_gen += 1
+        self._translating = False
         if self._poll_after_id is not None:
             try:
                 self._root.after_cancel(self._poll_after_id)
@@ -331,6 +441,9 @@ class ResultWindow:
             except tk.TclError:
                 pass
             self._win = None
+        # 主线程立即回收控件循环引用，防止工作线程 GC 触发
+        # 跨线程 Tcl 调用（Tcl_AsyncDelete 崩溃）
+        gc.collect()
 
     def close(self):
         self._destroy_window()

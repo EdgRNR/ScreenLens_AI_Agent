@@ -2,17 +2,23 @@
 """ScreenLens 配置管理。
 
 配置文件位置：%APPDATA%\\ScreenLens\\config.json
-首次运行自动生成默认配置。
+- 首次运行自动生成默认配置
+- 保存采用同目录临时文件 + os.replace 原子替换，避免写入中断留下损坏文件
+- 读取时校验结构，损坏/无效配置回退默认值并记录 load_error
+- 旧版部分配置自动补齐缺失字段（向后兼容）
 """
 import json
+import logging
 import os
+import tempfile
 import threading
+
+logger = logging.getLogger(__name__)
 
 APP_NAME = "ScreenLens"
 
-# 注意：load() 内部会调用 save()，必须使用可重入锁 RLock，
-# 否则同一线程二次获取非重入 Lock 会造成死锁。
-_LOCK_FACTORY = threading.RLock
+VALID_PROVIDERS = ("google_free", "openai", "none")
+VALID_LANGS = ("zh", "en", "ja")
 
 DEFAULT_CONFIG = {
     # 全局快捷键（keyboard 库格式，可自行修改，例如 "ctrl+alt+s" / "print_screen"）
@@ -34,6 +40,10 @@ DEFAULT_CONFIG = {
     },
 }
 
+# 注意：load() 内部会调用 save()，必须使用可重入锁 RLock，
+# 否则同一线程二次获取非重入 Lock 会造成死锁。
+_LOCK_FACTORY = threading.RLock
+
 
 def config_dir() -> str:
     base = os.environ.get("APPDATA") or os.path.expanduser("~")
@@ -54,6 +64,53 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
+def validate_config(data) -> list[str]:
+    """校验配置结构，返回错误列表（空列表 = 合法）。
+
+    仅做结构/取值校验；快捷键能否被系统接受由注册时的
+    HotkeyManager.register() 负责反馈。
+    """
+    errors = []
+    if not isinstance(data, dict):
+        return ["配置根节点必须是对象"]
+
+    hk = data.get("hotkey", DEFAULT_CONFIG["hotkey"])
+    if not isinstance(hk, str) or not hk.strip():
+        errors.append("快捷键不能为空")
+    elif len(hk) > 100:
+        errors.append("快捷键格式不正确")
+
+    tr = data.get("translation", {})
+    if not isinstance(tr, dict):
+        errors.append("translation 必须是对象")
+        return errors
+
+    provider = tr.get("provider", DEFAULT_CONFIG["translation"]["provider"])
+    if provider not in VALID_PROVIDERS:
+        errors.append(f"翻译提供器必须是 {' / '.join(VALID_PROVIDERS)} 之一")
+
+    lang = tr.get("target_language",
+                  DEFAULT_CONFIG["translation"]["target_language"])
+    if lang not in VALID_LANGS:
+        errors.append("目标语言必须是 zh / en / ja 之一")
+
+    oa = tr.get("openai", {})
+    if not isinstance(oa, dict):
+        errors.append("translation.openai 必须是对象")
+    else:
+        base_url = oa.get("base_url", "")
+        if base_url and not isinstance(base_url, str):
+            errors.append("base_url 必须是字符串")
+        elif base_url and not (base_url.startswith("http://")
+                               or base_url.startswith("https://")):
+            errors.append("base_url 必须以 http:// 或 https:// 开头")
+        if not isinstance(oa.get("api_key", ""), str):
+            errors.append("api_key 必须是字符串")
+        if not isinstance(oa.get("model", ""), str):
+            errors.append("model 必须是字符串")
+    return errors
+
+
 class Config:
     """线程安全的配置对象。"""
 
@@ -61,27 +118,65 @@ class Config:
         self._path = path or config_path()
         self._lock = _LOCK_FACTORY()
         self._data = dict(DEFAULT_CONFIG)
+        # 非空表示上次加载发现问题（已回退默认值），供 UI 提示
+        self.load_error: str | None = None
         self.load()
 
     def load(self) -> None:
         with self._lock:
+            self.load_error = None
             if os.path.isfile(self._path):
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         user_cfg = json.load(f)
+                    if not isinstance(user_cfg, dict):
+                        raise ValueError("配置根节点必须是对象")
+                    errors = validate_config(user_cfg)
+                    if errors:
+                        merged = _deep_merge(DEFAULT_CONFIG, user_cfg)
+                        self._data = merged
+                        self.load_error = "；".join(errors)
+                        return
                     self._data = _deep_merge(DEFAULT_CONFIG, user_cfg)
-                except (json.JSONDecodeError, OSError):
-                    # 配置损坏时保留默认值，不崩溃
+                except (json.JSONDecodeError, ValueError) as e:
                     self._data = dict(DEFAULT_CONFIG)
+                    self.load_error = f"配置文件损坏（{e}），已回退默认配置"
+                    return
+                except OSError as e:
+                    self._data = dict(DEFAULT_CONFIG)
+                    self.load_error = f"配置文件无法读取（{e}），已回退默认配置"
+                    return
             else:
                 self._data = dict(DEFAULT_CONFIG)
                 self.save()
 
     def save(self) -> None:
+        """原子写入：先写同目录临时文件，再 os.replace 替换。"""
         with self._lock:
             os.makedirs(os.path.dirname(self._path), exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._data, f, ensure_ascii=False, indent=2)
+            self._atomic_write()
+
+    def _atomic_write(self):
+        data = json.dumps(self._data, ensure_ascii=False, indent=2)
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=".screenlens-", suffix=".tmp",
+            dir=os.path.dirname(self._path))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self._path)
+        except Exception:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    @property
+    def path(self) -> str:
+        return self._path
 
     @property
     def hotkey(self) -> str:
@@ -94,6 +189,10 @@ class Config:
     @property
     def translation(self) -> dict:
         return self._data.get("translation", DEFAULT_CONFIG["translation"])
+
+    def set_translation(self, translation: dict) -> None:
+        """整体替换 translation 节点（设置窗口保存时使用）。"""
+        self._data["translation"] = translation
 
     def as_dict(self) -> dict:
         return json.loads(json.dumps(self._data))

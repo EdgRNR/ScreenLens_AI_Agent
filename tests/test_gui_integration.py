@@ -47,6 +47,9 @@ class TestOverlayGui(unittest.TestCase):
             self.root.destroy()
         except tk.TclError:
             pass
+        import gc
+
+        gc.collect()  # 主线程回收 Tk 对象，防止跨线程 GC 崩溃
 
     def _make_overlay(self):
         return CaptureOverlay(self.root, self._on_captured, self._on_cancel)
@@ -147,6 +150,9 @@ class TestResultWindowGui(unittest.TestCase):
             self.root.destroy()
         except tk.TclError:
             pass
+        import gc
+
+        gc.collect()  # 主线程回收 Tk 对象，防止跨线程 GC 崩溃
 
     def _on_recapture(self):
         self.recapture_called = True
@@ -198,15 +204,17 @@ class TestResultWindowGui(unittest.TestCase):
             pump(self.root, 100)
             if rw._text.get("1.0", "end-1c"):
                 break
+        # 模拟已有识别文字（provider=none 场景关注的是提示文案）
+        rw._has_text = True
+        rw._text.delete("1.0", "end")
+        rw._text.insert("1.0", "Hello world")
+        # provider=none：应提示翻译未启用并引导到设置，而非声称联网
         rw._on_translate()
-        deadline = time.time() + 5
-        status = ""
-        while time.time() < deadline:
-            pump(self.root, 50)
-            status = rw._status.cget("text")
-            if "未配置" in status:
-                break
-        self.assertIn("未配置在线翻译服务", status)
+        pump(self.root, 200)
+        status = rw._status.cget("text")
+        self.assertIn("翻译未启用", status)
+        self.assertIn("设置", status)
+        self.assertNotIn("发送", status)
         rw.close()
 
 

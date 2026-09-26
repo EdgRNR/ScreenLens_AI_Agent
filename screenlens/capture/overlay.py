@@ -208,3 +208,8 @@ class CaptureOverlay:
             except tk.TclError:
                 pass
             self._win = None
+        # 主线程立即回收控件循环引用，防止工作线程 GC 触发
+        # 跨线程 Tcl 调用（Tcl_AsyncDelete 崩溃）
+        import gc
+
+        gc.collect()
