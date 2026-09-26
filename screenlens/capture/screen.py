@@ -25,6 +25,27 @@ def set_dpi_awareness() -> None:
             pass
 
 
+def primary_monitor_bbox() -> dict:
+    """返回主显示器（虚拟坐标原点所在屏）的 {left, top, width, height}。
+
+    多显示器下"虚拟屏幕包围盒"的几何中心可能落在显示器之间的缝隙
+    或某块屏幕之外，因此工具条等浮动控件应以主显示器为参照。
+    """
+    try:
+        u = ctypes.windll.user32
+        w = u.GetSystemMetrics(0)   # SM_CXSCREEN
+        h = u.GetSystemMetrics(1)   # SM_CYSCREEN
+        if w > 0 and h > 0:
+            # Windows 虚拟坐标以主显示器左上角为原点
+            return {"left": 0, "top": 0, "width": w, "height": h}
+    except Exception:
+        pass
+    try:
+        return virtual_screen_bbox()
+    except Exception:
+        return {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+
 def virtual_screen_bbox() -> dict:
     """返回整个虚拟屏幕（所有显示器的包围盒）的 {left, top, width, height}。"""
     factory = getattr(mss, "MSS", mss.mss)

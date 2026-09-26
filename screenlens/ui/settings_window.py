@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-"""ScreenLens 设置窗口（Tkinter 轻量实现）。
+"""ScreenLens 设置窗口（第三阶段 UI 改版：分组卡片布局）。
 
-功能：
-- 快捷键查看 / 录入修改（捕获按键组合，保存前校验格式）
-- 翻译 Provider 选择：Google 免费接口 / OpenAI 兼容接口 / 关闭翻译
-- OpenAI 兼容配置：Base URL、API Key（默认隐藏）、模型
-- 默认目标语言：中文 / 英文 / 日文
-- 隐私说明：OCR 完全本地；在线 Provider 仅在点击翻译时发送识别文本
-- 保存（立即生效）、取消（不保存）、恢复默认值
+布局（自上而下的分组卡片）：
+1. 快捷键：当前热键展示 + 录入新快捷键
+2. 翻译服务：Provider 选择（仅显示所选 Provider 的相关字段）、
+   目标语言；API Key 默认隐藏
+3. 隐私：本地 OCR / 仅发送识别文本的说明
+4. 底部操作行：恢复默认值 / 取消 / 保存并生效 + 内联保存反馈
+
+保存成功/失败都在当前窗口内联给出明确反馈（不依赖系统弹窗），
+成功后短暂停留再关闭。
 
 保存时由 apply_callback 执行实际应用（写配置、重注册热键、
 刷新 Provider）。热键注册失败会回滚到先前可用的快捷键并向用户说明。
@@ -19,18 +21,24 @@ import gc
 import logging
 import re
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox  # noqa: F401  （测试桩会替换该属性）
 import tkinter.ttk as ttk
 
 from screenlens.config import DEFAULT_CONFIG, validate_config
+from screenlens.ui.theme import (
+    F_BODY,
+    F_SMALL,
+    F_TITLE,
+    GAP,
+    PAD,
+    PAD_LG,
+    FlatButton,
+    StatusLabel,
+    card,
+    palette_for_settings,
+)
 
 logger = logging.getLogger(__name__)
-
-BG = "#1e1f24"
-BG_PANEL = "#26272e"
-FG = "#e8e8e8"
-FG_DIM = "#9a9aa5"
-ACCENT = "#00c2ff"
 
 PROVIDER_LABELS = [
     ("google_free", "Google 免费翻译（无需 API Key，需联网）"),
@@ -40,7 +48,7 @@ PROVIDER_LABELS = [
 LANG_ITEMS = ["中文", "英文", "日文"]
 LANG_CODES = {"中文": "zh", "英文": "en", "日文": "ja"}
 PRIVACY_NOTE = (
-    "隐私说明：截图与 OCR 识别完全在本机完成，不上传任何图片。\n"
+    "截图与 OCR 识别完全在本机完成，不上传任何图片。\n"
     "仅当你在识别结果窗口点击「翻译」时，识别出的文字（而非截图）"
     "会发送给上面选择的在线翻译服务。关闭翻译即完全离线。"
 )
@@ -103,8 +111,10 @@ class SettingsWindow:
         self._root = root
         self._config = config
         self._apply = apply_callback
+        self._pal = palette_for_settings()
         self._win: tk.Toplevel | None = None
         self._capturing = False
+        self._close_after_id = None
 
     # ---------------------------------------------------------------- API
 
@@ -113,6 +123,7 @@ class SettingsWindow:
             self._win.deiconify()
             self._win.focus_force()
             return
+        self._pal = palette_for_settings()  # 每次打开跟随系统主题
         self._build()
         self._win.protocol("WM_DELETE_WINDOW", self._close)
 
@@ -122,58 +133,62 @@ class SettingsWindow:
     # -------------------------------------------------------------- build
 
     def _build(self):
+        pal = self._pal
         tr = self._config.translation
         self._win = tk.Toplevel(self._root)
         self._win.title("ScreenLens 设置")
-        self._win.configure(bg=BG, padx=0, pady=0)
+        self._win.configure(bg=pal["bg"])
         self._win.resizable(False, False)
         self._win.attributes("-topmost", True)
         self._topmost_after_id = self._win.after(200, self._unset_topmost)
 
-        pad = {"padx": 16, "pady": (6, 2)}
+        # ---- 标题 ----
+        tk.Label(self._win, text="设置", bg=pal["bg"], fg=pal["fg"],
+                 font=("Microsoft YaHei UI", 13, "bold")
+                 ).pack(anchor="w", padx=PAD_LG, pady=(PAD_LG, 2))
+        tk.Label(self._win, text="修改后点击「保存并生效」立即应用",
+                 bg=pal["bg"], fg=pal["fg_dim"], font=F_SMALL
+                 ).pack(anchor="w", padx=PAD_LG, pady=(0, GAP))
 
-        # ---- 快捷键 ----
-        frame_hk = tk.LabelFrame(self._win, text=" 全局快捷键 ", bg=BG,
-                                 fg=FG_DIM,
-                                 font=("Microsoft YaHei UI", 10, "bold"))
-        frame_hk.pack(fill="x", **pad)
-        row = tk.Frame(frame_hk, bg=BG)
-        row.pack(fill="x", padx=12, pady=10)
+        # ---- 卡片：快捷键 ----
+        hk_card, hk_inner = card(self._win, pal, "快捷键")
+        hk_card.pack(fill="x", padx=PAD_LG, pady=(GAP, 0))
+        row = tk.Frame(hk_inner, bg=pal["bg_card"])
+        row.pack(fill="x", padx=PAD, pady=PAD)
         self._hotkey_var = tk.StringVar(value=self._config.hotkey)
-        self._hotkey_entry = tk.Entry(row, textvariable=self._hotkey_var,
-                                      state="readonly", width=24, bg=BG_PANEL,
-                                      fg=FG, relief="flat",
-                                      font=("Consolas", 11))
+        self._hotkey_entry = tk.Entry(
+            row, textvariable=self._hotkey_var, state="readonly",
+            width=24, bg=pal["bg_input"], fg=pal["fg"], relief="flat",
+            font=("Consolas", 11), readonlybackground=pal["bg_input"],
+            highlightthickness=1,
+            highlightbackground=pal["border"])
         self._hotkey_entry.pack(side="left", ipady=4)
-        self._btn_capture = tk.Label(row, text=" 录入新快捷键 ", bg=BG_PANEL,
-                                     fg=FG, cursor="hand2", padx=10, pady=4,
-                                     font=("Microsoft YaHei UI", 10))
-        self._btn_capture.pack(side="left", padx=(10, 0))
-        self._btn_capture.bind("<Button-1>", lambda e: self._start_capture())
-        self._hotkey_hint = tk.Label(frame_hk, bg=BG, fg=FG_DIM,
-                                     font=("Microsoft YaHei UI", 9),
+        self._btn_capture = FlatButton(
+            row, "录入新快捷键", self._start_capture, pal)
+        self._btn_capture.pack(side="left", padx=(GAP, 0))
+        self._hotkey_hint = tk.Label(hk_inner, bg=pal["bg_card"],
+                                     fg=pal["fg_dim"], font=F_SMALL,
                                      text="点击「录入新快捷键」后按下组合键，"
                                           "Esc 取消录入")
-        self._hotkey_hint.pack(anchor="w", padx=12, pady=(0, 8))
+        self._hotkey_hint.pack(anchor="w", padx=PAD, pady=(0, PAD))
 
-        # ---- 翻译服务 ----
-        frame_tr = tk.LabelFrame(self._win, text=" 翻译服务 ", bg=BG,
-                                 fg=FG_DIM,
-                                 font=("Microsoft YaHei UI", 10, "bold"))
-        frame_tr.pack(fill="x", **pad)
+        # ---- 卡片：翻译服务 ----
+        tr_card, tr_inner = card(self._win, pal, "翻译服务")
+        tr_card.pack(fill="x", padx=PAD_LG, pady=(GAP, 0))
         self._provider_var = tk.StringVar(
             value=tr.get("provider", "google_free"))
         for value, label in PROVIDER_LABELS:
-            tk.Radiobutton(frame_tr, text=label, variable=self._provider_var,
-                           value=value, bg=BG, fg=FG, selectcolor=BG_PANEL,
-                           activebackground=BG, activeforeground=FG,
-                           font=("Microsoft YaHei UI", 10),
-                           command=self._on_provider_change
-                           ).pack(anchor="w", padx=12, pady=(8, 0))
+            tk.Radiobutton(
+                tr_inner, text=label, variable=self._provider_var,
+                value=value, bg=pal["bg_card"], fg=pal["fg"],
+                selectcolor=pal["bg_input"], activebackground=pal["bg_card"],
+                activeforeground=pal["fg"], font=F_BODY,
+                command=self._on_provider_change
+            ).pack(anchor="w", padx=PAD, pady=(GAP, 0))
 
-        # OpenAI 参数
-        self._oa_frame = tk.Frame(frame_tr, bg=BG)
-        self._oa_frame.pack(fill="x", padx=28, pady=(6, 4))
+        # OpenAI 参数（仅选择 OpenAI 时显示）
+        self._oa_frame = tk.Frame(tr_inner, bg=pal["bg_card"])
+        self._oa_frame.pack(fill="x", padx=PAD + 8, pady=(GAP, 4))
         oa = tr.get("openai", {})
         self._url_var = tk.StringVar(value=oa.get("base_url", ""))
         self._key_var = tk.StringVar(value=oa.get("api_key", ""))
@@ -181,13 +196,15 @@ class SettingsWindow:
         self._show_key = tk.BooleanVar(value=False)
 
         def add_field(parent, label, var, **kw):
-            r = tk.Frame(parent, bg=BG)
+            r = tk.Frame(parent, bg=pal["bg_card"])
             r.pack(fill="x", pady=3)
-            tk.Label(r, text=label, bg=BG, fg=FG_DIM, width=10, anchor="w",
-                     font=("Microsoft YaHei UI", 9)).pack(side="left")
-            e = tk.Entry(r, textvariable=var, bg=BG_PANEL, fg=FG,
-                         relief="flat", width=34,
-                         font=("Microsoft YaHei UI", 10), **kw)
+            tk.Label(r, text=label, bg=pal["bg_card"], fg=pal["fg_dim"],
+                     width=10, anchor="w", font=F_SMALL
+                     ).pack(side="left")
+            e = tk.Entry(r, textvariable=var, bg=pal["bg_input"],
+                         fg=pal["fg"], relief="flat", width=34,
+                         font=F_BODY, highlightthickness=1,
+                         highlightbackground=pal["border"], **kw)
             e.pack(side="left", ipady=3)
             return e
 
@@ -195,64 +212,55 @@ class SettingsWindow:
                                     self._url_var)
         self._key_entry = add_field(self._oa_frame, "API Key",
                                     self._key_var, show="*")
-        tk.Checkbutton(self._oa_frame, text="显示 API Key",
-                       variable=self._show_key, bg=BG, fg=FG_DIM,
-                       selectcolor=BG_PANEL, activebackground=BG,
-                       font=("Microsoft YaHei UI", 9),
-                       command=self._toggle_key_visibility
-                       ).pack(anchor="w", pady=(2, 0))
+        self._show_key_btn = FlatButton(
+            self._oa_frame, "显示 API Key", self._toggle_key_visibility,
+            pal, font=F_SMALL, padx=10, pady=2)
+        self._show_key_btn.pack(anchor="w", pady=(2, 0))
         self._model_entry = add_field(self._oa_frame, "模型",
                                       self._model_var)
         self._on_provider_change()
 
-        # ---- 目标语言 ----
-        frame_lang = tk.LabelFrame(self._win, text=" 默认目标语言 ", bg=BG,
-                                   fg=FG_DIM,
-                                   font=("Microsoft YaHei UI", 10, "bold"))
-        frame_lang.pack(fill="x", **pad)
+        # 目标语言
+        lang_row = tk.Frame(tr_inner, bg=pal["bg_card"])
+        lang_row.pack(fill="x", padx=PAD, pady=(GAP, PAD))
+        tk.Label(lang_row, text="默认目标语言", bg=pal["bg_card"],
+                 fg=pal["fg_dim"], font=F_SMALL).pack(side="left")
         self._lang_var = tk.StringVar(
             value={"zh": "中文", "en": "英文", "ja": "日文"}.get(
                 tr.get("target_language", "zh"), "中文"))
-        ttk.Combobox(frame_lang, textvariable=self._lang_var,
+        ttk.Combobox(lang_row, textvariable=self._lang_var,
                      values=LANG_ITEMS, state="readonly", width=8,
-                     font=("Microsoft YaHei UI", 10)).pack(
-            anchor="w", padx=12, pady=10)
+                     font=F_BODY).pack(side="left", padx=(GAP, 0))
 
-        # ---- 隐私说明 ----
-        frame_priv = tk.LabelFrame(self._win, text=" 隐私 ", bg=BG,
-                                   fg=FG_DIM,
-                                   font=("Microsoft YaHei UI", 10, "bold"))
-        frame_priv.pack(fill="x", **pad)
-        tk.Label(frame_priv, text=PRIVACY_NOTE, bg=BG, fg=FG_DIM,
-                 justify="left", wraplength=430,
-                 font=("Microsoft YaHei UI", 9)).pack(
-            anchor="w", padx=12, pady=10)
+        # ---- 卡片：隐私 ----
+        priv_card, priv_inner = card(self._win, pal, "隐私")
+        priv_card.pack(fill="x", padx=PAD_LG, pady=(GAP, 0))
+        tk.Label(priv_inner, text=PRIVACY_NOTE, bg=pal["bg_card"],
+                 fg=pal["fg_dim"], justify="left", wraplength=430,
+                 font=F_SMALL).pack(anchor="w", padx=PAD, pady=PAD)
 
-        # ---- 底部按钮 ----
-        btns = tk.Frame(self._win, bg=BG)
-        btns.pack(fill="x", padx=16, pady=(10, 16))
+        # ---- 底部操作行 + 内联反馈 ----
+        footer = tk.Frame(self._win, bg=pal["bg"])
+        footer.pack(fill="x", padx=PAD_LG, pady=(GAP, 4))
+        self._status = StatusLabel(footer, pal, bg=pal["bg"])
+        self._status.pack(side="left", fill="x", expand=True)
+        btns = tk.Frame(footer, bg=pal["bg"])
+        btns.pack(side="right")
 
-        def make_btn(parent, text, cmd, primary=False):
-            bg = ACCENT if primary else BG_PANEL
-            fg = "#08131a" if primary else FG
-            b = tk.Label(parent, text=text, bg=bg, fg=fg, cursor="hand2",
-                         padx=16, pady=5,
-                         font=("Microsoft YaHei UI", 10, "bold"))
-            b.bind("<Button-1>", lambda e: cmd())
-            return b
-
-        make_btn(btns, "保存并生效", self._on_save, primary=True).pack(
-            side="right")
-        make_btn(btns, "取消", self._close).pack(side="right", padx=(0, 10))
-        make_btn(btns, "恢复默认值", self._on_reset_defaults).pack(
-            side="left")
+        FlatButton(btns, "恢复默认值", self._on_reset_defaults,
+                   pal).pack(side="left")
+        FlatButton(btns, "取消", self._close, pal).pack(
+            side="left", padx=(GAP, 0))
+        FlatButton(btns, "保存并生效", self._on_save, pal,
+                   kind="primary").pack(side="left", padx=(GAP, 0))
+        # 底部留白
+        tk.Frame(self._win, bg=pal["bg"], height=PAD_LG).pack()
 
     # ------------------------------------------------------- hotkey capture
 
     def _start_capture(self):
         self._capturing = True
-        self._btn_capture.configure(text=" 请按下组合键（Esc 取消）… ",
-                                    fg=ACCENT)
+        self._btn_capture.configure(text="请按下组合键（Esc 取消）…")
         self._win.bind("<KeyPress>", self._on_capture_key)
         self._win.focus_force()
 
@@ -263,17 +271,18 @@ class SettingsWindow:
             return
         if hotkey is None:
             self._hotkey_hint.configure(
-                text=f"{error}（Esc 取消录入）", fg="#ff6b6b")
+                text=f"{error}（Esc 取消录入）", fg=self._pal["error"])
             return
         self._hotkey_var.set(hotkey)
         self._hotkey_hint.configure(
-            text=f"已录入：{hotkey}（保存后生效）", fg=FG_DIM)
+            text=f"已录入：{hotkey}（保存后生效）",
+            fg=self._pal["fg_dim"])
         self._stop_capture()
 
     def _stop_capture(self):
         self._capturing = False
         self._win.unbind("<KeyPress>")
-        self._btn_capture.configure(text=" 录入新快捷键 ", fg=FG)
+        self._btn_capture.configure(text="录入新快捷键")
 
     # ------------------------------------------------------------- actions
 
@@ -286,22 +295,18 @@ class SettingsWindow:
                 pass
 
     def _on_provider_change(self):
+        """只显示所选 Provider 的相关字段。"""
         if self._provider_var.get() == "openai":
-            for child in self._oa_frame.winfo_children():
-                try:
-                    child.configure(state="normal")
-                except tk.TclError:
-                    pass
+            self._oa_frame.pack(fill="x", padx=PAD + 8, pady=(GAP, 4))
         else:
-            for child in self._oa_frame.winfo_children():
-                try:
-                    child.configure(state="disabled")
-                except tk.TclError:
-                    pass
+            self._oa_frame.pack_forget()
 
     def _toggle_key_visibility(self):
-        self._key_entry.configure(
-            show="" if self._show_key.get() else "*")
+        shown = not self._show_key.get()
+        self._show_key.set(shown)
+        self._key_entry.configure(show="" if shown else "*")
+        self._show_key_btn.configure(
+            text="隐藏 API Key" if shown else "显示 API Key")
 
     def _collect(self) -> dict:
         lang_name = self._lang_var.get()
@@ -326,9 +331,8 @@ class SettingsWindow:
         # 1) 结构校验（本地，不触碰任何系统状态）
         errors = validate_config(candidate)
         if errors:
-            messagebox.showerror(
-                "设置无效", "以下问题需要修正：\n\n• " + "\n• ".join(errors),
-                parent=self._win)
+            self._status.set_status(
+                "以下问题需要修正：" + "；".join(errors), "error")
             return
 
         # 2) 交给应用层应用（写配置 + 注册热键 + 刷新 Provider）
@@ -336,18 +340,17 @@ class SettingsWindow:
         apply_errors = self._apply(candidate["hotkey"],
                                    candidate["translation"])
         if apply_errors:
-            messagebox.showwarning(
-                "部分设置未生效",
-                "以下问题导致部分设置未生效：\n\n• " + "\n• ".join(
-                    apply_errors) + "\n\n其余设置已保存。快捷键仍为当前"
-                "可用的值。",
-                parent=self._win)
+            self._status.set_status(
+                "部分设置未生效：" + "；".join(apply_errors)
+                + "。快捷键仍为当前可用的值。", "error")
             # 显示当前实际生效的快捷键
             self._hotkey_var.set(self._config.hotkey)
             return
 
-        messagebox.showinfo("设置", "设置已保存并立即生效。", parent=self._win)
-        self._close()
+        self._status.set_status("设置已保存并立即生效。", "success")
+        # 短暂停留展示成功反馈后关闭
+        if self._win is not None:
+            self._close_after_id = self._win.after(900, self._close)
 
     def _on_reset_defaults(self):
         """恢复默认值（仅填充界面，不保存）。"""
@@ -361,17 +364,20 @@ class SettingsWindow:
         self._key_var.set("")
         self._model_var.set(DEFAULT_CONFIG["translation"]["openai"]["model"])
         self._on_provider_change()
+        self._status.set_status("已恢复默认值（尚未保存）。", "info")
 
     def _close(self):
         if self._win is None:
             return
-        after_id = getattr(self, "_topmost_after_id", None)
-        if after_id is not None:
-            try:
-                self._win.after_cancel(after_id)
-            except Exception:
-                pass
-            self._topmost_after_id = None
+        for after_id in (getattr(self, "_topmost_after_id", None),
+                         self._close_after_id):
+            if after_id is not None:
+                try:
+                    self._win.after_cancel(after_id)
+                except Exception:
+                    pass
+        self._topmost_after_id = None
+        self._close_after_id = None
         try:
             self._win.unbind("<KeyPress>")
             self._win.destroy()

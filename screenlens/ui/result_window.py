@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""OCR 结果浮窗：轻量、无边框、置顶，出现在选区旁边。
+"""OCR 结果面板：层级化的原文 / 译文展示（第三阶段 UI 改版）。
+
+布局层级（自上而下）：
+1. 标题栏：状态指示（识别中/完成/翻译中…）+ 关闭按钮，可拖动
+2. 识别文字卡片：可编辑，独立滚动
+3. 翻译卡片：翻译后出现，独立滚动，卡片头部有「复制译文」
+4. 工具栏：复制（主操作）、翻译 + 目标语言（相邻）、重新截图、关闭
+5. 状态栏：语义化提示（info/busy/success/error，图标+颜色）
 
 线程模型：
 - OCR 与翻译在工作线程执行，结果通过 queue 投递，
@@ -26,19 +33,34 @@ from screenlens.translate.provider import (
     TranslationError,
     get_provider,
 )
+from screenlens.ui.theme import DARK as PAL, F_BODY, F_SMALL, F_TITLE, \
+    FlatButton, StatusLabel
 
 logger = logging.getLogger(__name__)
 
-BG = "#1e1f24"
-BG_PANEL = "#26272e"
-FG = "#e8e8e8"
-FG_DIM = "#9a9aa5"
-ACCENT = "#00c2ff"
-ERR = "#ff6b6b"
-
 WINDOW_W = 480
-WINDOW_H = 330          # 仅 OCR 结果时的高度
-TRANS_EXTRA = 140       # 展示翻译结果后增加的高度
+WINDOW_H = 350          # 仅 OCR 结果时的高度
+TRANS_EXTRA = 150       # 展示翻译结果后增加的高度
+
+
+class _Chip(tk.Label):
+    """标题栏状态指示（图标 + 文字，不只靠颜色）。"""
+
+    _STYLES = {
+        "busy":    ("… 识别中", PAL["fg_dim"]),
+        "done":    ("✓ 识别完成", PAL["success"]),
+        "trans":   ("… 翻译中", PAL["accent"]),
+        "transdone": ("✓ 翻译完成", PAL["accent"]),
+    }
+
+    def __init__(self, parent):
+        super().__init__(parent, text="", bg=PAL["bg_card"],
+                         font=("Microsoft YaHei UI", 9))
+        self.set_state("busy")
+
+    def set_state(self, key: str):
+        text, fg = self._STYLES.get(key, ("", PAL["fg_dim"]))
+        self.configure(text=text, fg=fg)
 
 
 class ResultWindow:
@@ -79,7 +101,7 @@ class ResultWindow:
     def show_ocr(self, crop, screen_bbox):
         """对截图运行 OCR 并展示结果（主线程调用）。"""
         self._build_window(screen_bbox)
-        self._set_status("识别中…")
+        self._set_status("识别中…", "busy")
         task = self._task_gen
         threading.Thread(
             target=self._run_ocr, args=(task, crop), daemon=True,
@@ -115,97 +137,109 @@ class ResultWindow:
         self._win = tk.Toplevel(self._root)
         self._win.overrideredirect(True)
         self._win.attributes("-topmost", True)
-        self._win.configure(bg=BG)
+        self._win.configure(bg=PAL["bg"])
         self._win.geometry(self._compute_geometry(screen_bbox))
 
-        # ---- 标题栏（可拖动）
-        bar = tk.Frame(self._win, bg=BG_PANEL)
+        # ---- 标题栏（状态指示 + 可拖动 + 关闭）
+        bar = tk.Frame(self._win, bg=PAL["bg_card"],
+                       highlightthickness=1,
+                       highlightbackground=PAL["border"])
         bar.pack(fill="x")
         self._drag_data = {"x": 0, "y": 0}
         bar.bind("<Button-1>", self._bar_press)
         bar.bind("<B1-Motion>", self._bar_drag)
-        tk.Label(bar, text="● ScreenLens 识别结果", bg=BG_PANEL, fg=FG_DIM,
-                 font=("Microsoft YaHei UI", 10, "bold")).pack(side="left",
-                                                              padx=10, pady=6)
-        btn_close = tk.Label(bar, text="✕", bg=BG_PANEL, fg=FG_DIM,
-                             font=("Segoe UI", 11), cursor="hand2")
-        btn_close.pack(side="right", padx=10)
-        btn_close.bind("<Button-1>", lambda e: self.close())
+        tk.Label(bar, text="ScreenLens", bg=PAL["bg_card"], fg=PAL["fg"],
+                 font=F_TITLE).pack(side="left", padx=(12, 10), pady=8)
+        self._chip = _Chip(bar)
+        self._chip.pack(side="left", pady=8)
+        self._btn_close_title = FlatButton(
+            bar, "✕", self.close, PAL, kind="secondary",
+            font=("Segoe UI", 11), padx=10, pady=3)
+        self._btn_close_title.pack(side="right", padx=6, pady=4)
 
-        # ---- 原文
-        body = tk.Frame(self._win, bg=BG)
-        body.pack(fill="both", expand=True, padx=10, pady=(6, 4))
-        tk.Label(body, text="识别文字（可编辑）", bg=BG, fg=FG_DIM,
-                 font=("Microsoft YaHei UI", 9)).pack(anchor="w")
-        self._text = tk.Text(body, bg=BG_PANEL, fg=FG, relief="flat",
-                             font=("Microsoft YaHei UI", 11), wrap="word",
-                             height=6, padx=8, pady=6,
-                             insertbackground=FG)
+        # ---- 识别文字卡片
+        body = tk.Frame(self._win, bg=PAL["bg"])
+        body.pack(fill="both", expand=True, padx=12, pady=(10, 4))
+        tk.Label(body, text="识别文字（可编辑）", bg=PAL["bg"],
+                 fg=PAL["fg_dim"], font=F_SMALL).pack(anchor="w")
+        text_row = tk.Frame(body, bg=PAL["bg"])
+        text_row.pack(fill="both", expand=True)
+        self._text = tk.Text(text_row, bg=PAL["bg_input"], fg=PAL["fg"],
+                             relief="flat", font=F_BODY, wrap="word",
+                             height=7, padx=10, pady=8,
+                             insertbackground=PAL["fg"],
+                             highlightthickness=1,
+                             highlightbackground=PAL["border"],
+                             highlightcolor=PAL["accent"])
         self._text.pack(side="left", fill="both", expand=True)
-        scrollbar = tk.Scrollbar(body, command=self._text.yview,
-                                  width=8, bg=BG_PANEL,
-                                  activebackground=FG_DIM,
-                                  troughcolor=BG_PANEL)
+        scrollbar = tk.Scrollbar(text_row, command=self._text.yview,
+                                  width=10, bg=PAL["bg_input"],
+                                  activebackground=PAL["fg_dim"],
+                                  troughcolor=PAL["bg_input"])
         scrollbar.pack(side="right", fill="y")
         self._text.configure(yscrollcommand=scrollbar.set)
 
-        # ---- 译文区（翻译后显示）
-        self._trans_frame = tk.Frame(self._win, bg=BG)
-        self._trans_frame.pack_forget()
-        tk.Label(self._trans_frame, text="翻译结果", bg=BG, fg=FG_DIM,
-                 font=("Microsoft YaHei UI", 9)).pack(anchor="w", padx=10)
-        trans_body = tk.Frame(self._trans_frame, bg=BG)
-        trans_body.pack(fill="x", padx=10, pady=(2, 4))
-        self._trans_text = tk.Text(trans_body, bg=BG_PANEL, fg=ACCENT,
-                                   relief="flat", font=("Microsoft YaHei UI", 11),
-                                   wrap="word", height=4, padx=8, pady=6)
-        self._trans_text.pack(side="left", fill="both", expand=True)
-        sb = tk.Label(trans_body, text="复制", bg=BG_PANEL, fg=FG_DIM,
-                      font=("Microsoft YaHei UI", 9), cursor="hand2")
-        sb.pack(side="right", anchor="ne", padx=(6, 0), pady=4)
-        sb.bind("<Button-1>", lambda e: self._copy_text(
-            self._trans_text.get("1.0", "end-1c"), "已复制译文"))
+        # ---- 工具栏（先建，译文卡片需要插到它上方）
+        toolbar = tk.Frame(self._win, bg=PAL["bg"])
+        self._toolbar = toolbar
+        toolbar.pack(fill="x", padx=12, pady=(2, 4))
 
-        # ---- 底部工具栏
-        toolbar = tk.Frame(self._win, bg=BG)
-        toolbar.pack(fill="x", padx=10, pady=(2, 10))
-
-        self._btn_copy = self._make_btn(toolbar, "复制原文", self._on_copy)
+        self._btn_copy = FlatButton(toolbar, "⧉ 复制", self._on_copy, PAL,
+                                    kind="primary")
         self._btn_copy.pack(side="left")
+        self._btn_copy.set_enabled(False)
+
+        self._btn_re = FlatButton(toolbar, "⟳ 重新截图",
+                                  self._on_recapture_btn, PAL)
+        self._btn_re.pack(side="right", padx=(10, 0))
 
         self._lang_var = tk.StringVar(
             value=LANG_NAMES.get(self._config.translation.get(
                 "target_language", "zh"), "中文"))
-        self._btn_translate = self._make_btn(
-            toolbar, "翻译", self._on_translate, primary=True)
-        self._btn_translate.pack(side="left", padx=(8, 0))
         lang_box = ttk.Combobox(toolbar, textvariable=self._lang_var,
                                 values=["中文", "英文", "日文"],
                                 state="readonly", width=5, font=(
                                     "Microsoft YaHei UI", 9))
-        lang_box.pack(side="left", padx=(6, 14), pady=(3, 0))
+        lang_box.pack(side="right", padx=(6, 0))
+        self._btn_translate = FlatButton(
+            toolbar, "翻译 ▸", self._on_translate, PAL)
+        self._btn_translate.pack(side="right")
+        self._btn_translate.set_enabled(False)
 
-        self._btn_re = self._make_btn(toolbar, "重新截图", self._on_recapture_btn)
-        self._btn_re.pack(side="right")
-        self._btn_close = self._make_btn(toolbar, "关闭", self.close)
-        self._btn_close.pack(side="right", padx=(0, 8))
+        # ---- 译文卡片（翻译后显示，位于工具栏上方）
+        self._trans_frame = tk.Frame(self._win, bg=PAL["bg"])
+        self._trans_frame.pack_forget()
+        trans_head = tk.Frame(self._trans_frame, bg=PAL["bg"])
+        trans_head.pack(fill="x", padx=12)
+        tk.Label(trans_head, text="翻译结果", bg=PAL["bg"],
+                 fg=PAL["fg_dim"], font=F_SMALL).pack(side="left")
+        self._btn_copy_trans = FlatButton(
+            trans_head, "复制译文", self._on_copy_trans, PAL,
+            font=F_SMALL, padx=10, pady=2)
+        self._btn_copy_trans.pack(side="right")
+        trans_body = tk.Frame(self._trans_frame, bg=PAL["bg"])
+        trans_body.pack(fill="both", expand=True, padx=12, pady=(2, 4))
+        self._trans_text = tk.Text(trans_body, bg=PAL["bg_input"],
+                                   fg=PAL["fg"], relief="flat",
+                                   font=F_BODY, wrap="word", height=5,
+                                   padx=10, pady=8,
+                                   insertbackground=PAL["fg"],
+                                   highlightthickness=1,
+                                   highlightbackground=PAL["border"])
+        self._trans_text.pack(side="left", fill="both", expand=True)
+        tsb = tk.Scrollbar(trans_body, command=self._trans_text.yview,
+                           width=10, bg=PAL["bg_input"],
+                           activebackground=PAL["fg_dim"],
+                           troughcolor=PAL["bg_input"])
+        tsb.pack(side="right", fill="y")
+        self._trans_text.configure(yscrollcommand=tsb.set)
 
         # ---- 状态栏
-        self._status = tk.Label(self._win, text="", bg=BG, fg=FG_DIM,
-                                font=("Microsoft YaHei UI", 9), anchor="w")
-        self._status.pack(fill="x", padx=12, pady=(0, 6))
+        self._status = StatusLabel(self._win, PAL, bg=PAL["bg"])
+        self._status.pack(fill="x", padx=14, pady=(0, 8))
 
         self._win.bind("<Escape>", lambda e: self.close())
         self._start_polling()
-
-    def _make_btn(self, parent, text, cmd, primary=False):
-        bg = ACCENT if primary else BG_PANEL
-        fg = "#08131a" if primary else FG
-        btn = tk.Label(parent, text=text, bg=bg, fg=fg, cursor="hand2",
-                       font=("Microsoft YaHei UI", 10, "bold"), padx=12,
-                       pady=4)
-        btn.bind("<Button-1>", lambda e: cmd())
-        return btn
 
     def _compute_geometry(self, screen_bbox):
         try:
@@ -229,9 +263,16 @@ class ResultWindow:
 
     def _on_copy(self):
         if not self._has_text:
-            self._set_status("没有可复制的文字。", error=True)
+            self._set_status("没有可复制的文字。", "error")
             return
         self._copy_text(self._text.get("1.0", "end-1c"), "已复制到剪贴板")
+
+    def _on_copy_trans(self):
+        text = self._trans_text.get("1.0", "end-1c")
+        if not text:
+            self._set_status("暂无译文。", "error")
+            return
+        self._copy_text(text, "已复制译文")
 
     def _copy_text(self, text, msg):
         if not text:
@@ -243,9 +284,9 @@ class ResultWindow:
             if self._root.clipboard_get() != text:
                 raise tk.TclError("clipboard verify failed")
         except tk.TclError:
-            self._set_status("复制失败，请重试。", error=True)
+            self._set_status("复制失败，请重试。", "error")
             return
-        self._set_status(msg)
+        self._set_status(msg, "success")
 
     def _on_recapture_btn(self):
         self.close()
@@ -268,10 +309,10 @@ class ResultWindow:
 
     def _on_translate(self):
         if self._translating:
-            self._set_status("翻译进行中，请稍候…")
+            self._set_status("翻译进行中，请稍候…", "busy")
             return
         if not self._has_text:
-            self._set_status("没有可翻译的文字。", error=True)
+            self._set_status("没有可翻译的文字。", "error")
             return
 
         provider = self._provider
@@ -279,26 +320,27 @@ class ResultWindow:
         if provider.name == "none":
             self._set_status(
                 "翻译未启用：请在托盘图标右键菜单打开「设置」，"
-                "选择翻译服务。", error=True)
+                "选择翻译服务。", "error")
             return
         # 2) OpenAI Provider 未配置
         if provider.name == "openai" and not getattr(
                 provider, "is_configured", True):
             self._set_status(
                 "当前未配置在线翻译服务：请在托盘菜单打开「设置」，"
-                "填写 OpenAI 兼容接口的 Base URL 与 API Key。", error=True)
+                "填写 OpenAI 兼容接口的 Base URL 与 API Key。", "error")
             return
 
         text = self._text.get("1.0", "end-1c").strip()
         if not text:
-            self._set_status("没有可翻译的文字。", error=True)
+            self._set_status("没有可翻译的文字。", "error")
             return
         lang_name = self._lang_var.get()
         target = next((k for k, v in LANG_NAMES.items() if v == lang_name),
                       "zh")
 
         hint = self._provider_hint(provider)
-        self._set_status(f"翻译中…（{hint}）")
+        self._set_status(f"翻译中…（{hint}）", "busy")
+        self._chip.set_state("trans")
         self._set_translate_busy(True)
         task = self._task_gen
 
@@ -325,10 +367,7 @@ class ResultWindow:
         self._translating = busy
         btn = getattr(self, "_btn_translate", None)
         if btn is not None and self._win is not None:
-            if busy:
-                btn.configure(fg="#5a6b75", cursor="arrow")
-            else:
-                btn.configure(fg="#08131a", cursor="hand2")
+            btn.set_enabled(not busy and self._has_text)
 
     # ------------------------------------------------------- queue polling
 
@@ -351,7 +390,8 @@ class ResultWindow:
                     self._handle_translation(payload)
                 elif kind == "trans_err":
                     self._set_translate_busy(False)
-                    self._set_status(payload, error=True)
+                    self._chip.set_state("done")
+                    self._set_status(payload, "error")
         except queue.Empty:
             pass
         if self._win is not None:
@@ -360,36 +400,41 @@ class ResultWindow:
     def _handle_ocr(self, result):
         if self._win is None:
             return
+        self._chip.set_state("done")
         if result.is_empty:
             self._text.delete("1.0", "end")
             self._text.insert("1.0", "未识别到文字")
-            self._text.configure(fg=FG_DIM)
-            self._btn_copy.configure(fg=FG_DIM)
-            self._btn_translate.configure(fg=FG_DIM)
-            self._set_status("未识别到文字，可点击“重新截图”再试。")
+            self._text.configure(fg=PAL["fg_dim"])
+            self._set_status("未识别到文字，可点击「重新截图」再试。",
+                             "info")
             return
         self._has_text = True
         self._text.delete("1.0", "end")
         self._text.insert("1.0", result.text)
+        self._btn_copy.set_enabled(True)
+        self._btn_translate.set_enabled(True)
         avg = sum(result.scores) / len(result.scores) if result.scores else 0
         self._set_status(f"识别完成 · {len(result.lines)} 行 · "
-                         f"平均置信度 {avg:.0%}")
+                         f"平均置信度 {avg:.0%}", "success")
 
     def _handle_ocr_error(self, msg):
         if self._win is None:
             return
+        self._chip.set_state("done")
         self._text.delete("1.0", "end")
         self._text.insert("1.0", "未识别到文字")
-        self._text.configure(fg=FG_DIM)
-        self._set_status(msg, error=True)
+        self._text.configure(fg=PAL["fg_dim"])
+        self._set_status(msg, "error")
 
     def _handle_translation(self, result):
         if self._win is None:
             return
         self._set_translate_busy(False)
+        self._chip.set_state("transdone")
         self._trans_text.delete("1.0", "end")
         self._trans_text.insert("1.0", result)
-        self._trans_frame.pack(fill="x", before=self._status)
+        self._trans_frame.pack(fill="both", expand=True,
+                               before=self._toolbar)
         # 窗口加高以容纳译文，并限制在虚拟桌面内
         x, y = self._win.winfo_x(), self._win.winfo_y()
         try:
@@ -398,14 +443,17 @@ class ResultWindow:
                                    - (WINDOW_H + TRANS_EXTRA)))
         except Exception:
             pass
-        self._win.geometry(f"{WINDOW_W}x{WINDOW_H + TRANS_EXTRA}+{x}+{y}")
-        self._set_status("翻译完成，可点击译文右侧「复制」复制译文")
+        self._win.geometry(
+            f"{WINDOW_W}x{WINDOW_H + TRANS_EXTRA}+{x}+{y}")
+        self._set_status("翻译完成，可点击译文卡片中的「复制译文」",
+                         "success")
 
     # -------------------------------------------------------------- helper
 
-    def _set_status(self, msg, error=False):
+    def _set_status(self, msg, level="info"):
+        """level: info / busy / success / error"""
         if self._status is not None and self._win is not None:
-            self._status.configure(text=msg, fg=ERR if error else FG_DIM)
+            self._status.set_status(msg, level)
 
     def _bar_press(self, event):
         self._drag_data["x"] = event.x
