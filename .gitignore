@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 测试与运行时产物
+.pytest_cache/
+.coverage
+htmlcov/
+tests/_appdata_tmp/
+screenlens.log
+
+# 本地临时文件
+*.tmp
+diag*.txt
+*_out.txt
+*_err.txt

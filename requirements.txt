@@ -1,0 +1,9 @@
+# ScreenLens dependencies
+rapidocr>=3.9,<4
+onnxruntime>=1.20
+mss>=9.0
+Pillow>=10.0
+keyboard>=0.13.5
+numpy
+pystray>=0.19.5
+requests>=2.31
