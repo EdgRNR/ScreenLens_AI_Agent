@@ -197,6 +197,25 @@ python scripts/acceptance_phase2.py
 
 ## 10. 项目结构
 
+仓库顶层目录：
+
+```
+ScreenLens_AI_Agent/
+├── screenlens/             # 现有 Python 应用源码
+├── tests/                  # 自动化测试
+├── scripts/                # 构建、验收与开发辅助脚本
+├── assets/                 # 应用图标等资源
+├── docs/
+│   ├── plans/              # 项目任务书、阶段计划与 UI 调研
+│   └── screenshots/        # 界面截图与验收材料
+├── winui/                  # WinUI 原型目录（初始为空，后续在此创建 VS 项目）
+├── run.py                  # 源码运行入口
+├── ScreenLens.pyw          # 无控制台运行入口
+└── requirements.txt        # Python 依赖
+```
+
+`winui/` 当前仅预留给新的 C# / WinUI 原型；现有 Python 版仍是可运行主程序。
+
 ```
 screenlens/
 ├── app.py                    # 主应用（生命周期、热键→截图→结果 串联、设置应用与热键回滚）
