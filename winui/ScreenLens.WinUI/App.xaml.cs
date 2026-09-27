@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -35,12 +34,32 @@ namespace ScreenLens.WinUI
         public App()
         {
             InitializeComponent();
+            UnhandledException += OnUnhandledException;
+            AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+        }
+
+        private static void WriteLog(string source, Exception ex)
+        {
+            try
+            {
+                var path = Path.Combine(Path.GetTempPath(), "screenlens_winui_crash.log");
+                File.AppendAllText(path, $"[{DateTime.Now:HH:mm:ss.fff}] {source}\n{ex}\n\n");
+            }
+            catch { }
+        }
+
+        private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+            => WriteLog("UnhandledException", e.Exception);
+
+        private void OnDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
+        {
+            if (e.ExceptionObject is Exception ex) WriteLog("AppDomain", ex);
         }
 
         /// <summary>
         /// Invoked when the application is launched.
         /// </summary>
-        /// <param name="args">Details about the launch request and process.</param>
+        /// <param name="args">Details about the launch request for the process.</param>
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
             _window = new MainWindow();

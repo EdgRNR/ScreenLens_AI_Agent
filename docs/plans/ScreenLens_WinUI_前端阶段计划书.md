@@ -1,7 +1,7 @@
 # ScreenLens WinUI 前端阶段计划书
 
 > 阶段：第四阶段——WinUI 前端原型  
-> 状态：待 AI 开始执行  
+> 状态：已完成（2026-09-27，编译通过、应用可启动，待人工逐页验收）  
 > 范围：只完成前端界面与演示交互，不接入 Python、OCR、截图或翻译后端。
 
 ## 1. 阶段目标
@@ -160,3 +160,29 @@ winui/ScreenLens.WinUI/
 ## 10. 给执行 AI 的工作方式
 
 请按“步骤 0 → 步骤 4”增量实现；先检查现有 WinUI 项目，再编辑文件。不要仅输出代码片段或停留在建议阶段。实现过程中若发现模板项目与计划描述有出入，优先保留现有项目结构并在汇报中说明。完成后给出修改文件、启动方法、人工验收结果和仍为模拟状态的功能清单。
+
+## 11. 执行记录（2026-09-27）
+
+### 已实现
+
+- **主窗口**：`NavigationView`（Left 模式）左侧导航 + PaneHeader 品牌区 + 右侧实色内容区（ScrollViewer + Frame），页脚入口「打开截图选区演示」；顶部 InfoBar 统一展示"尚未接入功能"轻提示。
+- **视觉资源** `Styles/ThemeResources.xaml`：Light/Dark 双 ThemeDictionaries（默认深色）、ScreenLens 蓝强调色、8px 间距节奏、字号阶梯、卡片样式、WCAG 对比度正文颜色。
+- **七个设置页**（`Views/Settings/`）：通用 / 截图与选区 / OCR 与结果 / 翻译 / 快捷键 / 外观 / 关于，全部使用可复用 `Controls/SettingCard`（图标+名称+说明+控件同行）。
+- **截图选区演示窗口** `Views/Preview/CaptureDemoWindow.xaml`：XAML 绘制的虚构桌面（渐变壁纸、两个假窗口、任务栏），四矩形遮罩挖洞，拖拽绘制矩形选区、实时尺寸标签、浮动工具条（矩形/自由圈选切换、放大镜、取消/确认）；Enter 确认、Esc 取消、方向键微调选区。
+- **识别结果演示窗口** `Views/Preview/ResultDemoWindow.xaml`：原文/译文分层卡片、状态 InfoBar、复制/翻译/重新截图按钮；翻译为 1.5 秒模拟延迟，防重复触发。
+- **演示状态** `ViewModels/DemoSettings.cs`：单例 INotifyPropertyChanged，全部值仅存内存；主题切换（跟随系统/浅色/深色）即时预览。
+
+### 与计划的差异说明
+
+- 侧栏使用 WinUI 标准 `NavigationView` 而非手绘布局，交互与可达性由系统控件保证；Pane 自带 Mica 透出（未强行实色）。
+- `.csproj`：目标框架与 Windows App SDK 版本未动；仅新增 `WindowsAppSDKSelfContained=true` 与 `WindowsAppSdkDeploymentManagerIsEnabled=false`——本机未安装全局 Windows App SDK Runtime，未打包启动需要自包含部署。
+- `App.xaml.cs` 附加未处理异常落盘日志（`%TEMP%\screenlens_winui_crash.log`），便于排查启动问题。
+
+### 验证结果
+
+- `dotnet build -c Debug -p:Platform=x64`：0 警告 0 错误。
+- 启动 `bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\ScreenLens.WinUI.exe`：进程常驻 39 秒以上，主窗口标题「ScreenLens 设置」正常加载，无崩溃日志。
+
+### 仍为模拟状态的功能
+
+翻译连接表单（不校验不保存）、快捷键编辑（不注册系统热键）、开机启动/最小化开关、放大镜、自由圈选（以矩形示意）、强调色选择（未全量应用）、复制（不写剪贴板）、翻译（无网络请求）。

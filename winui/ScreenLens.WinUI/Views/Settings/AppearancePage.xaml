@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ScreenLens.WinUI.Views.Settings.AppearancePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ScreenLens.WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+
+        <TextBlock Text="外观" Style="{StaticResource PageTitleText}" />
+        <TextBlock Text="主题与界面密度（原型演示，即时预览）" Style="{StaticResource PageSubtitleText}" />
+
+        <TextBlock Text="主题" Style="{StaticResource SectionHeaderText}" />
+        <controls:SettingCard Icon="&#xE790;" Title="主题模式" Description="与「通用」页设置联动">
+            <ComboBox SelectedIndex="{x:Bind Vm.ThemeMode, Mode=TwoWay}" MinWidth="160">
+                <ComboBoxItem Content="跟随系统" />
+                <ComboBoxItem Content="浅色" />
+                <ComboBoxItem Content="深色" />
+            </ComboBox>
+        </controls:SettingCard>
+
+        <TextBlock Text="强调色" Style="{StaticResource SectionHeaderText}" />
+        <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16">
+            <StackPanel Spacing="12">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <RadioButton x:Name="Accent0" GroupName="Accent" Checked="OnAccentChecked" Tag="0">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption1Brush}" />
+                            <TextBlock Text="ScreenLens 蓝" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="Accent1" GroupName="Accent" Checked="OnAccentChecked" Tag="1">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption2Brush}" />
+                            <TextBlock Text="黛紫" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="Accent2" GroupName="Accent" Checked="OnAccentChecked" Tag="2">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption3Brush}" />
+                            <TextBlock Text="青碧" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="Accent3" GroupName="Accent" Checked="OnAccentChecked" Tag="3">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption4Brush}" />
+                            <TextBlock Text="熔橙" />
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
+                <TextBlock Style="{StaticResource DemoNoteText}"
+                           Text="强调色预览：选中色仅影响当前导航与焦点指示（演示状态，未全量应用）" />
+            </StackPanel>
+        </Border>
+
+        <TextBlock Text="密度" Style="{StaticResource SectionHeaderText}" />
+        <controls:SettingCard Icon="&#xE71C;" Title="卡片密度" Description="设置页卡片的疏密程度">
+            <ComboBox SelectedIndex="{x:Bind Vm.CardDensity, Mode=TwoWay}" MinWidth="140">
+                <ComboBoxItem Content="舒适" />
+                <ComboBoxItem Content="紧凑" />
+            </ComboBox>
+        </controls:SettingCard>
+
+        <controls:SettingCard Icon="&#xE8D9;" Title="界面字号" Description="跟随系统缩放设置，暂不提供独立选项">
+            <Button Content="了解系统缩放" Click="OnPendingClick" />
+        </controls:SettingCard>
+
+        <TextBlock Text="&#xE946; 原型提示：本页设置仅保存在内存中，关闭应用后恢复默认。"
+                   Style="{StaticResource DemoNoteText}" Margin="0,12,0,0" />
+
+    </StackPanel>
+</Page>

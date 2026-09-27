@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ScreenLens.WinUI.Views.Preview.ResultDemoWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="Root">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="Escape" Invoked="OnEscapeInvoked" />
+        </Grid.KeyboardAccelerators>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 顶部状态条 -->
+        <InfoBar Grid.Row="0" x:Name="Status" IsOpen="True" IsClosable="False"
+                 Severity="Success" Title="识别完成" Message="示例数据 · 识别到 3 行文本" Margin="16,12,16,0" />
+
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="8" Padding="16" MaxWidth="720" HorizontalAlignment="Stretch">
+
+                <!-- 原文卡片 -->
+                <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16">
+                    <StackPanel Spacing="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="识别原文（示例）" Style="{StaticResource CardTitleText}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" x:Name="CopyButton" Click="OnCopyClick" ToolTipService.ToolTip="复制原文（演示）">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                    <TextBlock Text="复制" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <TextBlock Style="{StaticResource SampleMonoText}" xml:space="preserve">ScreenLens —— 屏幕翻译小工具
+快捷键：Ctrl + Alt + A 启动截图翻译
+Esc 取消本次截图</TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- 操作行 -->
+                <Grid HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="TranslateButton" Style="{StaticResource AccentButtonStyle}" Click="OnTranslateClick">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE774;" FontSize="14" />
+                                <TextBlock Text="翻译" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="OnRecaptureClick">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE722;" FontSize="14" />
+                                <TextBlock Text="重新截图" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="OnCloseClick" Content="关闭" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- 译文卡片 -->
+                <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="译文" Style="{StaticResource CardTitleText}" />
+                        <StackPanel x:Name="TranslatingRow" Orientation="Horizontal" Spacing="10" Visibility="Collapsed">
+                            <ProgressRing Width="20" Height="20" IsActive="True" />
+                            <TextBlock Text="翻译中……（模拟延迟，不发送网络请求）" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock x:Name="TranslatedText" Style="{StaticResource SampleMonoText}" Visibility="Collapsed"
+                                   Text="ScreenLens — Screen Translation Utility&#x0a;Hotkey: Ctrl + Alt + A to start capture and translate&#x0a;Press Esc to cancel this capture" />
+                        <TextBlock x:Name="NotTranslatedText" Style="{StaticResource DemoNoteText}"
+                                   Text="尚未翻译。点击上方「翻译」按钮查看演示译文（目标语言：英语）。" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="&#xE946; 演示数据：以上文本为固定样例，不代表真实识别或翻译结果；复制不会写入剪贴板。"
+                           Style="{StaticResource DemoNoteText}" Margin="0,4,0,12" />
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

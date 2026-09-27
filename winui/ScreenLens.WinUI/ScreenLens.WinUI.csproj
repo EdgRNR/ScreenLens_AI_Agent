@@ -12,6 +12,9 @@
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
+    <!-- 未打包部署：目标机器无需安装 Windows App SDK Runtime -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <WindowsAppSdkDeploymentManagerIsEnabled>false</WindowsAppSdkDeploymentManagerIsEnabled>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ScreenLens.WinUI.Views.Settings.TranslatePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ScreenLens.WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+
+        <TextBlock Text="翻译" Style="{StaticResource PageTitleText}" />
+        <TextBlock Text="截图识别文本的翻译服务（原型演示）" Style="{StaticResource PageSubtitleText}" />
+
+        <InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
+                 Title="原型界面" Message="尚未连接翻译服务，以下设置不会被保存或校验。" Margin="0,0,0,8" />
+
+        <TextBlock Text="目标语言" Style="{StaticResource SectionHeaderText}" />
+        <controls:SettingCard Icon="&#xE774;" Title="翻译目标语言" Description="识别文本将被翻译为该语言">
+            <ComboBox SelectedIndex="{x:Bind Vm.TargetLanguage, Mode=TwoWay}" MinWidth="160">
+                <ComboBoxItem Content="简体中文" />
+                <ComboBoxItem Content="英语" />
+                <ComboBoxItem Content="日语" />
+                <ComboBoxItem Content="韩语" />
+                <ComboBoxItem Content="法语" />
+            </ComboBox>
+        </controls:SettingCard>
+
+        <TextBlock Text="服务商" Style="{StaticResource SectionHeaderText}" />
+        <controls:SettingCard Icon="&#xE703;" Title="翻译服务" Description="提供翻译能力的后端服务">
+            <ComboBox SelectedIndex="{x:Bind Vm.Provider, Mode=TwoWay}" MinWidth="180">
+                <ComboBoxItem Content="Google 免费" />
+                <ComboBoxItem Content="OpenAI 兼容" />
+                <ComboBoxItem Content="DeepSeek" />
+                <ComboBoxItem Content="关闭翻译" />
+            </ComboBox>
+        </controls:SettingCard>
+
+        <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16">
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="连接参数（演示表单，不会保存）" Style="{StaticResource CardTitleText}" />
+
+                <StackPanel Grid.Row="1" Spacing="4">
+                    <TextBlock Text="API 地址" Style="{StaticResource CardDescText}" />
+                    <TextBox PlaceholderText="https://api.example.com/v1" MinWidth="360" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Spacing="4">
+                    <TextBlock Text="模型" Style="{StaticResource CardDescText}" />
+                    <TextBox PlaceholderText="gpt-4o-mini" MinWidth="360" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Spacing="4">
+                    <TextBlock Text="API 密钥" Style="{StaticResource CardDescText}" />
+                    <PasswordBox PlaceholderText="sk-••••••••••••••••••••" MinWidth="360" HorizontalAlignment="Left"
+                                  PasswordRevealMode="Peek" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TextBlock Text="&#xE946; 原型提示：隐私说明——翻译时仅发送选区内识别到的文本，截图本身不会上传。"
+                   Style="{StaticResource DemoNoteText}" Margin="0,12,0,0" />
+
+    </StackPanel>
+</Page>

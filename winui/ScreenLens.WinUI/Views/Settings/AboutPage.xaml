@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ScreenLens.WinUI.Views.Settings.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ScreenLens.WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+
+        <TextBlock Text="关于" Style="{StaticResource PageTitleText}" />
+        <TextBlock Text="关于 ScreenLens 的信息" Style="{StaticResource PageSubtitleText}" />
+
+        <!-- 品牌区 -->
+        <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,8,0,16">
+            <Border Width="56" Height="56" CornerRadius="12" Background="{StaticResource ScreenLensAccentBrush}">
+                <FontIcon Glyph="&#xE8B7;" FontSize="26" Foreground="White" />
+            </Border>
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="ScreenLens" FontSize="22" FontWeight="SemiBold"
+                           Foreground="{ThemeResource AppTextPrimaryBrush}" />
+                <TextBlock Text="屏幕文字识别与翻译工具 · WinUI 原型版" Style="{StaticResource CardDescText}" />
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock Text="版本" Style="{StaticResource SectionHeaderText}" />
+        <controls:SettingCard Icon="&#xE8FD;" Title="当前版本" Description="0.1.0-prototype（WinUI 前端原型，未接入后端）">
+            <Button Content="检查更新" Click="OnCheckUpdateClick" />
+        </controls:SettingCard>
+
+        <TextBlock Text="项目" Style="{StaticResource SectionHeaderText}" />
+        <controls:SettingCard Icon="&#xE943;" Title="开源项目" Description="GitHub 仓库链接（占位，尚未发布）">
+            <HyperlinkButton Content="github.com/…/ScreenLens" Click="OnProjectLinkClick" />
+        </controls:SettingCard>
+
+        <controls:SettingCard Icon="&#xE9D9;" Title="技术栈" Description="WinUI 3 · Windows App SDK · XAML 原生控件，界面原型不包含 OCR / 截图 / 翻译能力">
+            <HyperlinkButton Content="查看开发文档" Click="OnProjectLinkClick" />
+        </controls:SettingCard>
+
+        <TextBlock Text="声明" Style="{StaticResource SectionHeaderText}" />
+        <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16">
+            <TextBlock Style="{StaticResource CardDescText}" TextWrapping="Wrap"
+                       Text="本窗口为 ScreenLens 的前端界面原型，仅用于演示界面结构与交互。所有页面中的开关、下拉框与按钮只改变原型进程内的演示状态，不会读取或写入任何系统设置，也不会发起网络请求。" />
+        </Border>
+
+    </StackPanel>
+</Page>
