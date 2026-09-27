@@ -16,6 +16,10 @@ env/
 .vscode/
 .idea/
 *.swp
+**/.vs/
+**/bin/
+**/obj/
+*.csproj.user
 
 # 测试与运行时产物
 .pytest_cache/

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ScreenLens.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "ScreenLens.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
