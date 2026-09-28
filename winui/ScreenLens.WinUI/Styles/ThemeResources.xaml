@@ -98,6 +98,14 @@
     <x:Double x:Key="SpaceM">16</x:Double>
     <x:Double x:Key="SpaceL">24</x:Double>
 
+    <!-- 设置页统一内容布局：左对齐 + 统一最大宽度（所有页面共享同一基线） -->
+    <Style x:Key="SettingsPagePanel" TargetType="StackPanel">
+        <Setter Property="Padding" Value="{StaticResource PagePadding}" />
+        <Setter Property="Spacing" Value="8" />
+        <Setter Property="MaxWidth" Value="1000" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
     <!-- 卡片圆角 -->
     <CornerRadius x:Key="CardCornerRadius">8</CornerRadius>
 

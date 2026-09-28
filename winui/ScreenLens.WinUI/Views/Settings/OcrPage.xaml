@@ -8,7 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+    <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="OCR 与结果" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="识别结果面板的展示方式（原型演示）" Style="{StaticResource PageSubtitleText}" />

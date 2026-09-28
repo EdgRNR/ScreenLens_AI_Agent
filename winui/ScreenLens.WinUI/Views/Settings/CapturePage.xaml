@@ -8,7 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+    <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="截图与选区" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="控制屏幕截取时的选区行为（原型演示）" Style="{StaticResource PageSubtitleText}" />

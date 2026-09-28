@@ -8,7 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+    <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="通用" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="应用的基础行为设置（原型演示，更改仅保存在内存中）" Style="{StaticResource PageSubtitleText}" />

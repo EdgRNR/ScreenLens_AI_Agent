@@ -13,25 +13,8 @@
     </Window.SystemBackdrop>
 
     <Grid x:Name="RootGrid">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <!-- 顶部轻量演示提示（对尚未实现的操作统一反馈） -->
-        <InfoBar
-            Grid.Row="0"
-            x:Name="ToastBar"
-            IsOpen="False"
-            IsClosable="True"
-            Severity="Informational"
-            Title="原型演示"
-            Message="尚未接入功能"
-            Margin="16,8,16,0"
-            HorizontalAlignment="Right" />
-
+        <!-- 导航始终占满客户区：通知以覆盖层显示，不推移布局 -->
         <NavigationView
-            Grid.Row="1"
             x:Name="Nav"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
@@ -41,14 +24,12 @@
             Background="Transparent">
 
             <NavigationView.PaneHeader>
-                <!-- 品牌区域：ScreenLens 自己的标识 -->
+                <!-- 品牌区域：正式 Logo -->
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="16,16,16,12">
-                    <Border
+                    <Image
+                        Source="Assets/BrandLogo.png"
                         Width="28" Height="28"
-                        CornerRadius="6"
-                        Background="{ThemeResource ScreenLensAccentBrush}">
-                        <FontIcon Glyph="&#xE8B7;" FontSize="14" Foreground="White" />
-                    </Border>
+                        VerticalAlignment="Center" />
                     <TextBlock
                         Text="ScreenLens"
                         FontWeight="SemiBold"
@@ -111,5 +92,20 @@
                 </ScrollViewer>
             </Grid>
         </NavigationView>
+
+        <!-- 通知浮层：与主内容共用单元格的覆盖层，右上显示，
+             出现/关闭不改变任何页面元素的测量尺寸 -->
+        <InfoBar
+            x:Name="ToastBar"
+            IsOpen="False"
+            IsClosable="True"
+            Severity="Informational"
+            Title="原型演示"
+            Message="尚未接入功能"
+            MaxWidth="420"
+            Margin="16,12,16,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            IsTabStop="False" />
     </Grid>
 </Window>

@@ -8,16 +8,14 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+    <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="关于" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="关于 ScreenLens 的信息" Style="{StaticResource PageSubtitleText}" />
 
-        <!-- 品牌区 -->
+        <!-- 品牌区：使用正式 Logo -->
         <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,8,0,16">
-            <Border Width="56" Height="56" CornerRadius="12" Background="{ThemeResource ScreenLensAccentBrush}">
-                <FontIcon Glyph="&#xE8B7;" FontSize="26" Foreground="White" />
-            </Border>
+            <Image Source="Assets/BrandLogo.png" Width="56" Height="56" VerticalAlignment="Center" />
             <StackPanel VerticalAlignment="Center" Spacing="2">
                 <TextBlock Text="ScreenLens" FontSize="22" FontWeight="SemiBold"
                            Foreground="{ThemeResource AppTextPrimaryBrush}" />

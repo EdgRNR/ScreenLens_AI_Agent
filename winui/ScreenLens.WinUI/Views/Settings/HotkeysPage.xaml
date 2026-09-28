@@ -9,7 +9,7 @@
     xmlns:models="using:ScreenLens.WinUI.Models"
     mc:Ignorable="d">
 
-    <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+    <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="快捷键" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="查看和修改功能快捷键（演示值仅保存在内存中，不注册系统热键）" Style="{StaticResource PageSubtitleText}" />
