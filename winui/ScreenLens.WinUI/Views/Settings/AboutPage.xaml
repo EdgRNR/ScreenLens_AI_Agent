@@ -15,7 +15,7 @@
 
         <!-- 品牌区 -->
         <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,8,0,16">
-            <Border Width="56" Height="56" CornerRadius="12" Background="{StaticResource ScreenLensAccentBrush}">
+            <Border Width="56" Height="56" CornerRadius="12" Background="{ThemeResource ScreenLensAccentBrush}">
                 <FontIcon Glyph="&#xE8B7;" FontSize="26" Foreground="White" />
             </Border>
             <StackPanel VerticalAlignment="Center" Spacing="2">

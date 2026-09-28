@@ -18,8 +18,8 @@ namespace ScreenLens.WinUI.Views.Settings
         {
             if (sender is RadioButton { Tag: string tag } && int.TryParse(tag, out var index))
             {
-                Vm.AccentIndex = index;
-                Vm.ShowToast($"已选择强调色（演示状态，未全量应用）");
+                Vm.AccentIndex = index; // setter 触发 AccentChanged → App.ApplyAccent 即时应用
+                Vm.ShowToast($"已应用强调色（演示值，仅前端预览）");
             }
         }
 

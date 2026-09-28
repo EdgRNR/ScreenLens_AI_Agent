@@ -46,7 +46,7 @@
                     <Border
                         Width="28" Height="28"
                         CornerRadius="6"
-                        Background="{StaticResource ScreenLensAccentBrush}">
+                        Background="{ThemeResource ScreenLensAccentBrush}">
                         <FontIcon Glyph="&#xE8B7;" FontSize="14" Foreground="White" />
                     </Border>
                     <TextBlock

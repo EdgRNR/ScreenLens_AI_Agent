@@ -21,7 +21,7 @@
             </ComboBox>
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE8E5;" Title="松开鼠标后确认" Description="关闭时需在工具条上点击确认；开启时松开鼠标即开始识别">
+        <controls:SettingCard Icon="&#xE8E5;" Title="选区后显示确认工具条" Description="开启：松开鼠标后显示确认 / 取消工具条，点击确认才进入识别；关闭：松开鼠标直接开始识别（演示中直接打开结果预览）">
             <ToggleSwitch IsOn="{x:Bind Vm.ConfirmOnRelease, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
@@ -41,8 +41,8 @@
         </Border>
 
         <TextBlock Text="演示" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE722;" Title="截图选区演示" Description="在模拟桌面上体验选区遮罩、尺寸反馈与工具条（不截取真实屏幕）">
-            <Button Content="打开演示窗口" Style="{StaticResource AccentButtonStyle}" Click="OnOpenDemoClick" />
+        <controls:SettingCard Icon="&#xE722;" Title="截图选区演示" Description="在模拟桌面上体验选区遮罩、尺寸反馈与工具条（不截取真实屏幕）；是否显示确认工具条跟随上方开关">
+            <Button Content="打开演示窗口" Style="{StaticResource AppAccentButtonStyle}" Click="OnOpenDemoClick" />
         </controls:SettingCard>
 
     </StackPanel>

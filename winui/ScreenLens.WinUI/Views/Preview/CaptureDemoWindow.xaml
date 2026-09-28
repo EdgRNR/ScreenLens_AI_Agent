@@ -12,7 +12,7 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="Root">
+    <Grid x:Name="Root" KeyDown="OnRootKeyDown">
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Key="Escape" Invoked="OnEscapeInvoked" />
         </Grid.KeyboardAccelerators>
@@ -87,17 +87,19 @@
             <Rectangle x:Name="MaskRight" Fill="{ThemeResource AppMaskBrush}" />
         </Canvas>
 
-        <!-- ③ 选区装饰层：边框 + 尺寸标签 -->
+        <!-- ③ 选区装饰层：矩形边框 + 自由路径 + 尺寸标签 -->
         <Canvas x:Name="SelectionLayer" IsHitTestVisible="False">
             <Border x:Name="SelBorder" Style="{StaticResource SelectionBorder}" />
+            <Polyline x:Name="FreePath" StrokeThickness="2" StrokeDashArray="4 2" Visibility="Collapsed"
+                      Stroke="{ThemeResource ScreenLensAccentBrush}" />
             <Border x:Name="SizeBadge" Background="{ThemeResource AppBadgeBgBrush}" CornerRadius="4" Padding="10,4">
                 <TextBlock x:Name="SizeText" FontFamily="Consolas" FontSize="12"
                            Foreground="{ThemeResource AppBadgeFgBrush}" />
             </Border>
         </Canvas>
 
-        <!-- ④ 指针交互捕获层（透明，位于工具条之下） -->
-        <Grid x:Name="HitLayer" Background="Transparent"
+        <!-- ④ 指针交互捕获层（透明，位于工具条之下，可聚焦以接收键盘） -->
+        <Grid x:Name="HitLayer" Background="Transparent" IsTabStop="True" TabIndex="0"
               PointerPressed="OnPointerPressed" PointerMoved="OnPointerMoved"
               PointerReleased="OnPointerReleased" PointerCanceled="OnPointerReleased" />
 
@@ -115,7 +117,7 @@
                     </Button>
                     <AppBarSeparator />
                     <Button Content="取消" Click="OnCancelClick" />
-                    <Button Content="确认" Style="{StaticResource AccentButtonStyle}" Click="OnConfirmClick" />
+                    <Button Content="确认" Style="{StaticResource AppAccentButtonStyle}" Click="OnConfirmClick" />
                 </StackPanel>
             </Border>
         </Canvas>

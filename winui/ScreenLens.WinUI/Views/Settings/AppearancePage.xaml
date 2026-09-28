@@ -52,12 +52,12 @@
                     </RadioButton>
                 </StackPanel>
                 <TextBlock Style="{StaticResource DemoNoteText}"
-                           Text="强调色预览：选中色仅影响当前导航与焦点指示（演示状态，未全量应用）" />
+                           Text="强调色即时应用到品牌标识、主按钮与截图选区边框（仅前端演示值）" />
             </StackPanel>
         </Border>
 
         <TextBlock Text="密度" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE71C;" Title="卡片密度" Description="设置页卡片的疏密程度">
+        <controls:SettingCard Icon="&#xE71C;" Title="卡片密度" Description="切换后立即改变所有设置页卡片的内边距与高度">
             <ComboBox SelectedIndex="{x:Bind Vm.CardDensity, Mode=TwoWay}" MinWidth="140">
                 <ComboBoxItem Content="舒适" />
                 <ComboBoxItem Content="紧凑" />

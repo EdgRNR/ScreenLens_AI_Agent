@@ -65,5 +65,52 @@ namespace ScreenLens.WinUI
             _window = new MainWindow();
             _window.Activate();
         }
+
+        // ---------- 主题与强调色助手 ----------
+
+        /// <summary>把演示主题模式解析为元素主题，供独立演示窗口跟随主窗口外观。</summary>
+        public static ElementTheme ResolveTheme(int mode) => mode switch
+        {
+            1 => ElementTheme.Light,
+            2 => ElementTheme.Dark,
+            _ => ElementTheme.Default,
+        };
+
+        private static readonly (string Accent, string Hover, string Pressed)[] AccentPalette =
+        {
+            ("#3D9BFF", "#5CA8FF", "#2B7FE0"), // ScreenLens 蓝
+            ("#7C6FF0", "#9284F5", "#6355DB"), // 黛紫
+            ("#4CC38A", "#66D0A0", "#3AA173"), // 青碧
+            ("#E5602F", "#EE7A4E", "#C74E23"), // 熔橙
+        };
+
+        /// <summary>
+        /// 把选中的强调色写入 Light/Dark 主题字典。引用 {ThemeResource} 的
+        /// 品牌区、选区边框、主按钮等元素会即时刷新。
+        /// </summary>
+        public static void ApplyAccent(int index)
+        {
+            if (index < 0 || index >= AccentPalette.Length) return;
+            var (accent, hover, pressed) = AccentPalette[index];
+
+            var resources = Current.Resources;
+            foreach (var key in new[] { "Light", "Dark" })
+            {
+                if (resources.ThemeDictionaries[key] is not ResourceDictionary dict) continue;
+                dict["ScreenLensAccentBrush"] = MakeBrush(accent);
+                dict["ScreenLensAccentHoverBrush"] = MakeBrush(hover);
+                dict["ScreenLensAccentPressedBrush"] = MakeBrush(pressed);
+            }
+        }
+
+        private static SolidColorBrush MakeBrush(string hex)
+        {
+            var c = Windows.UI.Color.FromArgb(
+                0xFF,
+                Convert.ToByte(hex.Substring(1, 2), 16),
+                Convert.ToByte(hex.Substring(3, 2), 16),
+                Convert.ToByte(hex.Substring(5, 2), 16));
+            return new SolidColorBrush(c);
+        }
     }
 }

@@ -17,15 +17,23 @@ namespace ScreenLens.WinUI
         {
             InitializeComponent();
 
+            // 默认窗口尺寸（后续仍可自由调整）
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(1180, 760));
+
             // 默认深色主题，并跟随主题模式即时预览
             ApplyTheme(_vm.ThemeMode);
             _vm.ThemeModeChanged += ApplyTheme;
+
+            // 强调色变化即时写入主题字典（品牌区 / 主按钮 / 选区边框）
+            _vm.AccentChanged += App.ApplyAccent;
 
             // 统一的“尚未接入功能”轻提示
             _vm.ToastRequested += ShowToast;
             _toastTimer.Tick += (_, _) => { ToastBar.IsOpen = false; _toastTimer.Stop(); };
 
-            ContentFrame.Navigate(typeof(Views.Settings.GeneralPage));
+            // 初始导航到通用页，并同步记录当前页面类型（供演示入口恢复选中态）
+            _lastPageType = typeof(Views.Settings.GeneralPage);
+            ContentFrame.Navigate(_lastPageType);
         }
 
         private void ApplyTheme(int mode) =>

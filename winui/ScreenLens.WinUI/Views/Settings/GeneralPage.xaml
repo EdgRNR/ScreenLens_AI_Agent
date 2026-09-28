@@ -23,17 +23,17 @@
         </controls:SettingCard>
 
         <TextBlock Text="启动" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE7E8;" Title="开机自动启动" Description="登录 Windows 后自动运行 ScreenLens">
+        <controls:SettingCard Icon="&#xE7E8;" Title="开机自动启动" Description="登录 Windows 后自动运行 ScreenLens（原型演示：不修改系统启动项）">
             <ToggleSwitch IsOn="{x:Bind Vm.LaunchAtStartup, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE923;" Title="启动后最小化" Description="仅保留托盘图标，不显示主窗口" IsEnabled="{x:Bind Vm.LaunchAtStartup, Mode=OneWay}">
+        <controls:SettingCard Icon="&#xE923;" Title="启动后最小化" Description="仅保留托盘图标，不显示主窗口（原型演示：仅内存状态）" IsEnabled="{x:Bind Vm.LaunchAtStartup, Mode=OneWay}">
             <ToggleSwitch IsOn="{x:Bind Vm.StartMinimized, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
         <TextBlock Text="语言" Style="{StaticResource SectionHeaderText}" />
         <controls:SettingCard Icon="&#xF2B7;" Title="界面语言" Description="当前版本暂仅提供简体中文">
-            <Button Content="查看可用语言" Click="OnPendingClick" />
+            <Button Content="了解可用语言" Click="OnPendingClick" />
         </controls:SettingCard>
 
         <TextBlock Text="&#xE946; 原型提示：本页开关均为演示状态，不会写入系统或配置文件。"

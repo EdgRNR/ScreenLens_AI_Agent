@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using ScreenLens.WinUI.ViewModels;
 using System;
 
 namespace ScreenLens.WinUI.Views.Preview
@@ -23,6 +24,9 @@ namespace ScreenLens.WinUI.Views.Preview
             {
                 p.IsResizable = true;
             }
+
+            // 跟随主窗口当前主题，保证文字对比可读
+            Root.RequestedTheme = App.ResolveTheme(DemoSettings.Instance.ThemeMode);
         }
 
         private void OnCopyClick(object sender, RoutedEventArgs e)

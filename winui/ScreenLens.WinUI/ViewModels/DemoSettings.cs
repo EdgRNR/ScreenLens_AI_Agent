@@ -1,5 +1,7 @@
+using ScreenLens.WinUI.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -50,6 +52,7 @@ namespace ScreenLens.WinUI.ViewModels
         private int _defaultCaptureMode;
         public int DefaultCaptureMode { get => _defaultCaptureMode; set => Set(ref _defaultCaptureMode, value); }
 
+        /// <summary>开启：松开鼠标显示确认工具条；关闭：松开鼠标直接开始识别（演示中直接打开结果预览）</summary>
         private bool _confirmOnRelease = true;
         public bool ConfirmOnRelease { get => _confirmOnRelease; set => Set(ref _confirmOnRelease, value); }
 
@@ -77,10 +80,41 @@ namespace ScreenLens.WinUI.ViewModels
         // ---------- 外观 ----------
         /// <summary>0 = 舒适（默认），1 = 紧凑</summary>
         private int _cardDensity;
-        public int CardDensity { get => _cardDensity; set => Set(ref _cardDensity, value); }
+        public int CardDensity
+        {
+            get => _cardDensity;
+            set { if (Set(ref _cardDensity, value)) CardDensityChanged?.Invoke(value); }
+        }
+
+        public event Action<int>? CardDensityChanged;
 
         private int _accentIndex;
-        public int AccentIndex { get => _accentIndex; set => Set(ref _accentIndex, value); }
+        public int AccentIndex
+        {
+            get => _accentIndex;
+            set { if (Set(ref _accentIndex, value)) AccentChanged?.Invoke(value); }
+        }
+
+        /// <summary>强调色变化：由 App.ApplyAccent 应用到主题资源</summary>
+        public event Action<int>? AccentChanged;
+
+        // ---------- 快捷键（演示值） ----------
+
+        public ObservableCollection<HotkeyEntry> Hotkeys { get; } = new()
+        {
+            new HotkeyEntry { Icon = "\uE722", Action = "截图并翻译", Description = "启动区域截图，识别后立即翻译", Keys = "Ctrl + Alt + A" },
+            new HotkeyEntry { Icon = "\uE8A5", Action = "截图并识别", Description = "仅识别选区文字，不进行翻译", Keys = "Ctrl + Alt + O" },
+            new HotkeyEntry { Icon = "\uE713", Action = "打开设置", Description = "打开 ScreenLens 设置窗口", Keys = "Ctrl + Alt + S" },
+            new HotkeyEntry { Icon = "\uE7E7", Action = "退出截图", Description = "取消进行中的截图并关闭遮罩", Keys = "Esc" },
+        };
+
+        public void ResetHotkeys()
+        {
+            Hotkeys[0].Keys = "Ctrl + Alt + A";
+            Hotkeys[1].Keys = "Ctrl + Alt + O";
+            Hotkeys[2].Keys = "Ctrl + Alt + S";
+            Hotkeys[3].Keys = "Esc";
+        }
 
         // ---------- 轻量演示提示 ----------
         public event Action<string>? ToastRequested;

@@ -22,6 +22,7 @@
             <Color x:Key="AppDividerColor">#E4E4E4</Color>
             <Color x:Key="AppMaskColor">#66000000</Color>
             <Color x:Key="AppBadgeBgColor">#2B2B2B</Color>
+            <Color x:Key="AppBadgeFgColor">#FFFFFF</Color>
 
             <SolidColorBrush x:Key="AppWindowBgBrush" Color="{StaticResource AppWindowBgColor}" />
             <SolidColorBrush x:Key="AppNavBgBrush" Color="{StaticResource AppNavBgColor}" />
@@ -34,7 +35,12 @@
             <SolidColorBrush x:Key="AppDividerBrush" Color="{StaticResource AppDividerColor}" />
             <SolidColorBrush x:Key="AppMaskBrush" Color="{StaticResource AppMaskColor}" />
             <SolidColorBrush x:Key="AppBadgeBgBrush" Color="{StaticResource AppBadgeBgColor}" />
-            <SolidColorBrush x:Key="AppBadgeFgBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppBadgeFgBrush" Color="{StaticResource AppBadgeFgColor}" />
+
+            <!-- ScreenLens 强调色（运行时可由 App.ApplyAccent 替换） -->
+            <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
+            <SolidColorBrush x:Key="ScreenLensAccentHoverBrush" Color="#5CA8FF" />
+            <SolidColorBrush x:Key="ScreenLensAccentPressedBrush" Color="#2B7FE0" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -49,6 +55,7 @@
             <Color x:Key="AppDividerColor">#333333</Color>
             <Color x:Key="AppMaskColor">#88000000</Color>
             <Color x:Key="AppBadgeBgColor">#2B2B2B</Color>
+            <Color x:Key="AppBadgeFgColor">#FFFFFF</Color>
 
             <SolidColorBrush x:Key="AppWindowBgBrush" Color="{StaticResource AppWindowBgColor}" />
             <SolidColorBrush x:Key="AppNavBgBrush" Color="{StaticResource AppNavBgColor}" />
@@ -61,18 +68,15 @@
             <SolidColorBrush x:Key="AppDividerBrush" Color="{StaticResource AppDividerColor}" />
             <SolidColorBrush x:Key="AppMaskBrush" Color="{StaticResource AppMaskColor}" />
             <SolidColorBrush x:Key="AppBadgeBgBrush" Color="{StaticResource AppBadgeBgColor}" />
-            <SolidColorBrush x:Key="AppBadgeFgBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="AppBadgeFgBrush" Color="{StaticResource AppBadgeFgColor}" />
+
+            <!-- ScreenLens 强调色（运行时可由 App.ApplyAccent 替换） -->
+            <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
+            <SolidColorBrush x:Key="ScreenLensAccentHoverBrush" Color="#5CA8FF" />
+            <SolidColorBrush x:Key="ScreenLensAccentPressedBrush" Color="#2B7FE0" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
-
-    <!-- ScreenLens 强调色（当前导航、主按钮焦点、选区边框） -->
-    <Color x:Key="ScreenLensAccentColor">#3D9BFF</Color>
-    <Color x:Key="ScreenLensAccentHoverColor">#5CA8FF</Color>
-    <Color x:Key="ScreenLensAccentPressedColor">#2B7FE0</Color>
-    <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="{StaticResource ScreenLensAccentColor}" />
-    <SolidColorBrush x:Key="ScreenLensAccentHoverBrush" Color="{StaticResource ScreenLensAccentHoverColor}" />
-    <SolidColorBrush x:Key="ScreenLensAccentPressedBrush" Color="{StaticResource ScreenLensAccentPressedColor}" />
 
     <!-- 预设强调色（外观页演示） -->
     <SolidColorBrush x:Key="AccentOption1Brush" Color="#3D9BFF" />
@@ -153,10 +157,19 @@
         <Setter Property="LineHeight" Value="22" />
     </Style>
 
-    <!-- 演示窗口的选区边框 -->
+    <!-- 演示窗口的选区边框（强调色运行时可变） -->
     <Style x:Key="SelectionBorder" TargetType="Border">
-        <Setter Property="BorderBrush" Value="{StaticResource ScreenLensAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ScreenLensAccentBrush}" />
         <Setter Property="BorderThickness" Value="2" />
+    </Style>
+
+    <!-- ScreenLens 主按钮：跟随强调色（用于确认、翻译、打开演示等主操作） -->
+    <Style x:Key="AppAccentButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource ScreenLensAccentBrush}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="16,8" />
     </Style>
 
 </ResourceDictionary>

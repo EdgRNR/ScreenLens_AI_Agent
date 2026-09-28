@@ -6,58 +6,39 @@
     xmlns:controls="using:ScreenLens.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:ScreenLens.WinUI.Models"
     mc:Ignorable="d">
 
     <StackPanel Padding="{StaticResource PagePadding}" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
 
         <TextBlock Text="快捷键" Style="{StaticResource PageTitleText}" />
-        <TextBlock Text="查看和修改功能快捷键（原型演示，不注册系统热键）" Style="{StaticResource PageSubtitleText}" />
+        <TextBlock Text="查看和修改功能快捷键（演示值仅保存在内存中，不注册系统热键）" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="全局快捷键" Style="{StaticResource SectionHeaderText}" />
 
-        <controls:SettingCard Icon="&#xE722;" Title="截图并翻译" Description="启动区域截图，识别后立即翻译">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Background="{ThemeResource AppBadgeBgBrush}" CornerRadius="4" Padding="10,5">
-                    <TextBlock Text="Ctrl + Alt + A" FontFamily="Consolas" FontSize="13"
-                               Foreground="{ThemeResource AppBadgeFgBrush}" />
-                </Border>
-                <Button Content="编辑" Click="OnEditHotkeyClick" />
-            </StackPanel>
-        </controls:SettingCard>
-
-        <controls:SettingCard Icon="&#xE8A5;" Title="截图并识别" Description="仅识别选区文字，不进行翻译">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Background="{ThemeResource AppBadgeBgBrush}" CornerRadius="4" Padding="10,5">
-                    <TextBlock Text="Ctrl + Alt + O" FontFamily="Consolas" FontSize="13"
-                               Foreground="{ThemeResource AppBadgeFgBrush}" />
-                </Border>
-                <Button Content="编辑" Click="OnEditHotkeyClick" />
-            </StackPanel>
-        </controls:SettingCard>
-
-        <controls:SettingCard Icon="&#xE713;" Title="打开设置" Description="打开 ScreenLens 设置窗口">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Background="{ThemeResource AppBadgeBgBrush}" CornerRadius="4" Padding="10,5">
-                    <TextBlock Text="Ctrl + Alt + S" FontFamily="Consolas" FontSize="13"
-                               Foreground="{ThemeResource AppBadgeFgBrush}" />
-                </Border>
-                <Button Content="编辑" Click="OnEditHotkeyClick" />
-            </StackPanel>
-        </controls:SettingCard>
-
-        <controls:SettingCard Icon="&#xE7E7;" Title="退出截图" Description="取消进行中的截图并关闭遮罩">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border Background="{ThemeResource AppBadgeBgBrush}" CornerRadius="4" Padding="10,5">
-                    <TextBlock Text="Esc" FontFamily="Consolas" FontSize="13"
-                               Foreground="{ThemeResource AppBadgeFgBrush}" />
-                </Border>
-                <Button Content="编辑" Click="OnEditHotkeyClick" />
-            </StackPanel>
-        </controls:SettingCard>
+        <ItemsControl ItemsSource="{x:Bind Vm.Hotkeys}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:HotkeyEntry">
+                    <controls:SettingCard
+                        Icon="{x:Bind Icon}"
+                        Title="{x:Bind Action}"
+                        Description="{x:Bind Description}"
+                        Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Background="{ThemeResource AppBadgeBgBrush}" CornerRadius="4" Padding="10,5">
+                                <TextBlock Text="{x:Bind Keys, Mode=OneWay}" FontFamily="Consolas" FontSize="13"
+                                           Foreground="{ThemeResource AppBadgeFgBrush}" />
+                            </Border>
+                            <Button Content="编辑" Click="OnEditHotkeyClick" />
+                        </StackPanel>
+                    </controls:SettingCard>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <Button Content="恢复默认快捷键" Click="OnResetHotkeysClick" Margin="0,8,0,0" />
 
-        <TextBlock Text="&#xE946; 原型提示：快捷键列表为演示状态，修改不会注册到系统。"
+        <TextBlock Text="&#xE946; 原型提示：编辑会更新此页显示的演示值；关闭应用后恢复默认，不会影响操作系统快捷键。"
                    Style="{StaticResource DemoNoteText}" Margin="0,12,0,0" />
 
     </StackPanel>

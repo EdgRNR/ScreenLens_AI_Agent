@@ -5,14 +5,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:Name="CardHost"
     mc:Ignorable="d">
 
-    <Border Style="{StaticResource SettingCardBorderStyle}" MinHeight="68">
+    <Border x:Name="CardRoot" Style="{StaticResource SettingCardBorderStyle}" MinHeight="68">
         <Grid ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" MaxWidth="360" />
             </Grid.ColumnDefinitions>
 
             <FontIcon
@@ -25,16 +26,21 @@
             <StackPanel
                 Grid.Column="1"
                 VerticalAlignment="Center"
-                Spacing="2"
-                Margin="0,0,16,0">
+                Spacing="2">
                 <TextBlock Text="{x:Bind Title, Mode=OneWay}" Style="{StaticResource CardTitleText}" TextWrapping="Wrap" />
                 <TextBlock
                     Text="{x:Bind Description, Mode=OneWay}"
                     Style="{StaticResource CardDescText}"
+                    TextWrapping="Wrap"
                     Visibility="{x:Bind DescToVis(Description), Mode=OneWay}" />
             </StackPanel>
 
-            <ContentPresenter Grid.Column="2" VerticalAlignment="Center" />
+            <!-- 右侧操作控件槽：显式绑定 Content，控件宽度自适应 -->
+            <ContentPresenter
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Right"
+                Content="{Binding Content, ElementName=CardHost}" />
         </Grid>
     </Border>
 </UserControl>
