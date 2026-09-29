@@ -15,6 +15,8 @@
     <!-- 未打包部署：目标机器无需安装 Windows App SDK Runtime -->
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <WindowsAppSdkDeploymentManagerIsEnabled>false</WindowsAppSdkDeploymentManagerIsEnabled>
+    <!-- 窗口 / 任务栏 / exe 内嵌图标（多尺寸 ICO，由 scripts/generate_icons.py 生成） -->
+    <ApplicationIcon>Assets\ScreenLens.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,6 +28,17 @@
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
     <Content Include="Assets\BrandLogo.png" />
+    <Content Include="Assets\BrandLogo.scale-200.png" />
+    <Content Include="Assets\ScreenLens.ico" />
+  </ItemGroup>
+
+  <!--
+    未打包（unpackaged）运行时，XAML 相对资源 URI（如 "Assets/BrandLogo.png"）
+    以应用目录为基准解析；只写入 AppX\Assets 的话图片会加载失败。
+    这里让 Assets 同时部署到 exe 同级目录。
+  -->
+  <ItemGroup>
+    <Content Update="Assets\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

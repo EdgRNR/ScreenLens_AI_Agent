@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml.Navigation;
 using ScreenLens.WinUI.ViewModels;
 using ScreenLens.WinUI.Views.Preview;
 using System;
+using System.IO;
+using System.Runtime.InteropServices;
 
 namespace ScreenLens.WinUI
 {
@@ -13,12 +15,49 @@ namespace ScreenLens.WinUI
         private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(3) };
         private Type? _lastPageType;
 
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        /// <summary>
+        /// AppWindow.Resize 使用物理像素；这里按当前显示器 DPI 换算，
+        /// 保证 100% / 150% 等缩放下窗口的**逻辑**尺寸一致（默认 1180x760 DIP）。
+        /// </summary>
+        private void ResizeToLogicalSize(int logicalWidth, int logicalHeight)
+        {
+            double scale = 1.0;
+            try
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                uint dpi = GetDpiForWindow(hwnd);
+                if (dpi > 0) scale = dpi / 96.0;
+            }
+            catch
+            {
+                // 取不到 DPI 时退回 1:1
+            }
+
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(
+                (int)Math.Round(logicalWidth * scale),
+                (int)Math.Round(logicalHeight * scale)));
+        }
+
         public MainWindow()
         {
             InitializeComponent();
 
             // 默认窗口尺寸（后续仍可自由调整）
-            AppWindow.Resize(new Windows.Graphics.SizeInt32(1180, 760));
+            ResizeToLogicalSize(1180, 760);
+
+            // 窗口 / 任务栏图标：未打包运行不会自动读取 Assets，需显式指定多尺寸 ICO
+            try
+            {
+                var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ScreenLens.ico");
+                if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
+            }
+            catch
+            {
+                // 图标缺失不应阻断启动
+            }
 
             // 默认深色主题，并跟随主题模式即时预览
             ApplyTheme(_vm.ThemeMode);

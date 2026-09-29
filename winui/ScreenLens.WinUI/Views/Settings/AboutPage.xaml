@@ -13,10 +13,17 @@
         <TextBlock Text="关于" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="关于 ScreenLens 的信息" Style="{StaticResource PageSubtitleText}" />
 
-        <!-- 品牌区：使用正式 Logo -->
-        <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,8,0,16">
-            <Image Source="Assets/BrandLogo.png" Width="56" Height="56" VerticalAlignment="Center" />
-            <StackPanel VerticalAlignment="Center" Spacing="2">
+        <!-- 品牌区：Logo + 产品名 + 副标题，按页面内容左侧基线对齐（不居中悬浮）。
+             注意：Page 内的资源相对 URI 会以 Page 所在目录为基准解析，
+             必须使用 ms-appx 绝对 URI，否则 "Assets/BrandLogo.png" 会指向
+             Views/Settings/Assets/… 而加载失败。 -->
+        <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,20">
+            <Image
+                Source="ms-appx:///Assets/BrandLogo.png"
+                Width="56"
+                Height="56"
+                VerticalAlignment="Top" />
+            <StackPanel VerticalAlignment="Center" Spacing="3">
                 <TextBlock Text="ScreenLens" FontSize="22" FontWeight="SemiBold"
                            Foreground="{ThemeResource AppTextPrimaryBrush}" />
                 <TextBlock Text="屏幕文字识别与翻译工具 · WinUI 原型版" Style="{StaticResource CardDescText}" />

@@ -9,14 +9,50 @@
     mc:Ignorable="d">
 
     <Border x:Name="CardRoot" Style="{StaticResource SettingCardBorderStyle}" MinHeight="68">
-        <Grid ColumnSpacing="16">
+        <!-- 窄窗口下操作控件移到标题下方，避免与说明文字互相挤压 -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="CardLayoutStates">
+                <VisualState x:Name="WideCardState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="900" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ActionHost.(Grid.Row)" Value="0" />
+                        <Setter Target="ActionHost.(Grid.Column)" Value="2" />
+                        <Setter Target="ActionHost.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="ActionHost.HorizontalAlignment" Value="Right" />
+                        <Setter Target="ActionHost.Margin" Value="0" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="NarrowCardState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ActionHost.(Grid.Row)" Value="1" />
+                        <Setter Target="ActionHost.(Grid.Column)" Value="1" />
+                        <Setter Target="ActionHost.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="ActionHost.HorizontalAlignment" Value="Left" />
+                        <Setter Target="ActionHost.Margin" Value="0,4,0,0" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid x:Name="CardGrid" ColumnSpacing="16" RowSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" MaxWidth="360" />
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
             <FontIcon
+                x:Name="CardIcon"
+                Grid.Row="0"
                 Grid.Column="0"
                 Glyph="{x:Bind Icon, Mode=OneWay}"
                 FontSize="18"
@@ -24,6 +60,8 @@
                 VerticalAlignment="Center" />
 
             <StackPanel
+                x:Name="CardText"
+                Grid.Row="0"
                 Grid.Column="1"
                 VerticalAlignment="Center"
                 Spacing="2">
@@ -35,12 +73,15 @@
                     Visibility="{x:Bind DescToVis(Description), Mode=OneWay}" />
             </StackPanel>
 
-            <!-- 右侧操作控件槽：显式绑定 Content，控件宽度自适应 -->
+            <!-- 操作控件槽：绑定 ActionContent（ContentProperty 已重定向到该属性，
+                 避免外部子元素覆盖 UserControl.Content 导致整张卡片被替换） -->
             <ContentPresenter
+                x:Name="ActionHost"
+                Grid.Row="0"
                 Grid.Column="2"
                 VerticalAlignment="Center"
                 HorizontalAlignment="Right"
-                Content="{Binding Content, ElementName=CardHost}" />
+                Content="{x:Bind ActionContent, Mode=OneWay}" />
         </Grid>
     </Border>
 </UserControl>

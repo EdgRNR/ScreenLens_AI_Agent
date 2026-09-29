@@ -3,6 +3,7 @@
     x:Class="ScreenLens.WinUI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="using:ScreenLens.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -13,6 +14,11 @@
     </Window.SystemBackdrop>
 
     <Grid x:Name="RootGrid">
+        <Grid.Resources>
+            <!-- 设置页内容区宽度上限：保证各页卡片等宽且左对齐 -->
+            <conv:WidthClampConverter x:Key="ClampContentWidth" MaxWidth="1000" />
+        </Grid.Resources>
+
         <!-- 导航始终占满客户区：通知以覆盖层显示，不推移布局 -->
         <NavigationView
             x:Name="Nav"
@@ -27,7 +33,7 @@
                 <!-- 品牌区域：正式 Logo -->
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="16,16,16,12">
                     <Image
-                        Source="Assets/BrandLogo.png"
+                        Source="ms-appx:///Assets/BrandLogo.png"
                         Width="28" Height="28"
                         VerticalAlignment="Center" />
                     <TextBlock
@@ -85,10 +91,14 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <!-- 右侧内容区：实色表面，可滚动 -->
+            <!-- 右侧内容区：实色表面，可滚动。
+                 Frame 宽度钳制到 1000 DIP 并左对齐，使七个设置页的卡片宽度一致。 -->
             <Grid Background="{ThemeResource AppWindowBgBrush}">
-                <ScrollViewer>
-                    <Frame x:Name="ContentFrame" />
+                <ScrollViewer x:Name="ContentScroll" HorizontalScrollMode="Disabled">
+                    <Frame
+                        x:Name="ContentFrame"
+                        HorizontalAlignment="Left"
+                        Width="{Binding ViewportWidth, ElementName=ContentScroll, Converter={StaticResource ClampContentWidth}}" />
                 </ScrollViewer>
             </Grid>
         </NavigationView>

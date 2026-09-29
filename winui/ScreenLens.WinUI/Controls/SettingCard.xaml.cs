@@ -1,14 +1,19 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Markup;
 using ScreenLens.WinUI.ViewModels;
 
 namespace ScreenLens.WinUI.Controls
 {
     /// <summary>
-    /// 可复用设置卡片：图标、名称、简短说明与操作控件排在同一行。
-    /// 直接写入卡片 XAML 内容的控件会显示在右侧操作槽（Content）。
-    /// 卡片密度跟随 DemoSettings 即时变化（舒适/紧凑）。
+    /// 可复用设置卡片：图标、名称、简短说明与操作控件排在同一行（窄窗口时操作控件换行到下方）。
+    ///
+    /// 注意：WinUI 的 UserControl 会把 XAML 子元素写入 Content 属性，直接写在
+    /// SettingCard 标签内的控件会覆盖 InitializeComponent 载入的卡片视觉树。
+    /// 因此这里用 ContentProperty 把子元素重定向到 ActionContent，再由卡片内部的
+    /// ContentPresenter 呈现，卡片本体（边框 / 图标 / 标题 / 说明）才能保留。
     /// </summary>
+    [ContentProperty(Name = nameof(ActionContent))]
     public sealed partial class SettingCard : UserControl
     {
         public static readonly DependencyProperty IconProperty =
@@ -19,6 +24,10 @@ namespace ScreenLens.WinUI.Controls
 
         public static readonly DependencyProperty DescriptionProperty =
             DependencyProperty.Register(nameof(Description), typeof(string), typeof(SettingCard), new PropertyMetadata(string.Empty));
+
+        /// <summary>右侧（窄窗口时下方）操作控件槽。</summary>
+        public static readonly DependencyProperty ActionContentProperty =
+            DependencyProperty.Register(nameof(ActionContent), typeof(object), typeof(SettingCard), new PropertyMetadata(null));
 
         public string Icon
         {
@@ -36,6 +45,12 @@ namespace ScreenLens.WinUI.Controls
         {
             get => (string)GetValue(DescriptionProperty);
             set => SetValue(DescriptionProperty, value);
+        }
+
+        public object? ActionContent
+        {
+            get => GetValue(ActionContentProperty);
+            set => SetValue(ActionContentProperty, value);
         }
 
         public SettingCard()
