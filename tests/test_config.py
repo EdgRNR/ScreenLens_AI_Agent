@@ -85,7 +85,9 @@ class TestValidateConfig(unittest.TestCase):
 
     def test_good_openai_url(self):
         cfg = {"translation": {"provider": "openai",
-                               "openai": {"base_url": "https://api.x/v1"}}}
+                               "openai": {"base_url": "https://api.x/v1",
+                                          "model": "test-model",
+                                          "api_key": "test-key"}}}
         self.assertEqual(validate_config(cfg), [])
 
 

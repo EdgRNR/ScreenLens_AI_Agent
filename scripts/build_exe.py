@@ -22,7 +22,7 @@ def main():
     import PyInstaller.__main__
 
     args = [
-        os.path.join(ROOT, "run.py"),
+        os.path.join(ROOT, "run_legacy.py"),
         "--name=ScreenLens",
         "--noconfirm",
         "--clean",

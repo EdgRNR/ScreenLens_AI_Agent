@@ -32,42 +32,106 @@ Windows 桌面轻量取词工具：**自由圈选 → 本地 OCR → 复制 / �
 
 ## 2. 安装与运行
 
-### 方式 A：直接运行打包版（推荐）
+### 当前开发方式：WinUI 前端 + Python 后台代理
 
-1. 打开 `dist/ScreenLens/`
-2. 双击 `ScreenLens.exe`
-3. 托盘出现镜头图标即已常驻，按 `Ctrl + Alt + A` 开始截图
+开发测试时，先在终端运行 `.venv\Scripts\python.exe run_agent.py`，再从 Visual Studio 按 F5 启动 WinUI 前端。前端只连接已有 Agent；如果后台没启动，设置界面仍可打开并显示未连接状态，不会擅自拉起 Python 进程。
 
-> 首次启动后台预热 OCR 模型约 1–2 秒；托盘右键 → 退出 可完全关闭。
+### 旧版 Python/Tk 原型运行方式（历史）
 
-### 方式 B：源码运行
+仓库中的 `run_legacy.py`、`run_legacy.pyw` 和 `dist/ScreenLens/ScreenLens.exe` 属于旧版 Python/Tk 原型，不是当前 WinUI 应用入口。
 
-需要 Python 3.10+（在 3.14 上开发验证）：
+WinUI 与 Python Agent 的单独发布打包流程尚未提供。发布包应包含 WinUI 前端和配套 Agent/Worker；不要用旧脚本生成的 exe 作为当前 WinUI 版本。
+
+旧原型源码启动命令（仅用于维护旧版）：
 
 ```powershell
 pip install -r requirements.txt
-python run.py            # 控制台模式（可看日志）
-python ScreenLens.pyw   # 无控制台模式
+python run_legacy.py       # 控制台模式（可看日志）
+python run_legacy.pyw      # 无控制台模式
 ```
 
-## 3. 构建（打包 exe）
+### 架构：WinUI 前端 + 后台代理（当前开发形态）
+
+界面由 WinUI 3 前端提供，业务与 OCR 留在 Python 侧，两者以命名管道通信。
+进程各自按需存活，空闲时不驻留重内存：
+
+| 组件 | 职责 | 内存（私有工作集） |
+|---|---|---|
+| 后台代理 `run_agent.py` | 常驻托盘；全局热键、配置读写、命名管道服务、唤起前端。不含 UI 框架，不加载 OCR 模型 | 目标低于 **50 MiB**；须实测确认 |
+| WinUI 前端 `ScreenLens.WinUI.exe` | 设置窗口 / 截图选区 / 结果窗口；窗口关闭后进程退出 | 按需测量，不计入“仅后台空闲”指标 |
+| OCR / 翻译 worker | 任务期间按需启动；空闲 15 秒后退出，OCR 模型随进程退出回收 | 任务期间升高；空闲态不应残留 |
+
+### 用 Visual Studio 启动（推荐）
+
+打开 `winui\ScreenLens.WinUI\ScreenLens.WinUI.slnx`，选择 **x64 / Unpackaged** 后按 F5。
+开发时需先单独运行后台代理，再启动前端：
+
+```powershell
+.venv\Scripts\python.exe run_agent.py
+```
+
+WinUI 会连接已运行的后台代理；关闭设置窗口后，前端退出而托盘代理继续工作；从托盘
+打开设置或按全局热键时，已有 WinUI 实例会被唤起。
+
+只有当正式发布目录将 `ScreenLensAgent.exe` 与 WinUI 放在同一目录时，前端才会自动启动随包代理。也可通过 `SCREENLENS_AGENT_EXE` 显式指定代理，或在开发调试时设置 `SCREENLENS_AUTOSTART_AGENT=1` 选择自动启动。
+
+手动运行后台也方便观察日志：
+
+```powershell
+# 开发调试时单独启动后台
+.venv\Scripts\python.exe run_agent.py
+```
+
+- 前端 exe 定位顺序：环境变量 `SCREENLENS_WINUI_EXE` → 代理同目录（打包布局）→
+  仓库开发布局 `winui\ScreenLens.WinUI\bin\x64\{Debug,Release}\...\ScreenLens.WinUI.exe`
+- IPC 协议（命名管道 v1，仅当前用户可访问，不监听任何 TCP 端口）见
+  `screenlens/ipc/protocol.py`
+- 设置数据边界：热键 / 翻译服务等写入 Python 配置；主题、卡片密度、截图交互等
+  纯前端偏好写入 `%LOCALAPPDATA%\ScreenLens\frontend.json`，互不覆盖
+- 日志：`%LOCALAPPDATA%\ScreenLens\logs\{agent,worker}.log`
+
+内存采样会自动统计指定代理及其 worker / WinUI 后代进程；从日志中的代理 PID 开始：
+
+```powershell
+.venv\Scripts\python.exe scripts\measure_memory.py --root-pid <代理PID> --duration 60 --label 后台空闲
+```
+
+截图模式的命令行参数（供脚本化调用与自动化验证）：
+
+```powershell
+ScreenLens.WinUI.exe --capture --region=400,140,900,80 --auto
+```
+
+`--region=x,y,w,h` 为相对虚拟屏幕的物理像素矩形，`--auto` 表示预置选区后立即识别。
+
+> **抓屏能力边界（已知）**：选区截图由 GDI `BitBlt`（`SRCCOPY | CAPTUREBLT`）
+> 从虚拟屏幕 DC 取得，覆盖全部显示器，内存开销低。但带
+> `WS_EX_NOREDIRECTIONBITMAP` 的窗口像素不写入重定向表面，**无法被截取**，
+> 典型如 Microsoft Edge、Windows 设置、Windows Terminal（含其承载的
+> `cmd`）、部分 UWP/WinUI 应用。传统 Win32 窗口、Electron 应用（VS Code、
+> 多数 IDE）以及未启用系统 backdrop 的 WinUI 3 窗口不受影响。
+> 若需覆盖全部窗口，应改用 Windows.Graphics.Capture（WGC）或
+> DXGI Desktop Duplication。
+
+> **调试开关**：设置环境变量 `SCREENLENS_DEBUG_DUMP=<目录>` 后，前端会把
+> 每次实际发往 OCR 的选区 PNG 落盘，便于定位“识别结果为空”。
+> 未设置该变量时不产生任何文件与额外开销。
+
+## 3. 旧版原型打包（非当前 WinUI 发布包）
 
 ```powershell
 pip install -r requirements.txt pyinstaller
 python scripts/build_exe.py
-# 输出 dist/ScreenLens/ScreenLens.exe（onedir，约 260MB，含离线 OCR 模型）
+# 输出旧版 Python/Tk 原型 dist/ScreenLens/ScreenLens.exe
 ```
 
 ## 4. 使用说明
 
-1. 按 `Ctrl + Alt + A`（或托盘菜单「截图」）
-2. 屏幕冻结，底部出现工具条：**「▭ 矩形」/「✎ 自由圈选」**（默认矩形），右侧提示当前键位
-3. 直接拖动即可框选；**Ctrl+拖动 / 右键拖动** 可临时切到自由圈选（圈一下那句话即可）
-   - 拖动中会显示选区边框与 `宽 × 高`；工具条若被选区压住会自动让开
-4. 松开鼠标 → 选区进入待确认状态，工具条变为 **「✓ 识别并取词 (Enter)」/「✕ 取消 (Esc)」**
-5. 按 `Enter`（或点按钮）开始 OCR，结果面板出现在选区旁；选区过小会提示重新拖动
-6. 结果面板操作：**复制**（主操作）/ **翻译**（语言下拉可选中/英/日）/ **重新截图**；关闭点标题栏 `✕` 或按 `Esc`
-7. 识别与翻译都在面板中分层显示，文字可直接编辑后再复制 / 翻译；译文卡片有独立「复制译文」
+1. 开发调试时先运行 `.venv\Scripts\python.exe run_agent.py`，再在 Visual Studio 按 F5。发布版的自动启动行为待发布打包完成后验收。
+2. 按 `Ctrl + Alt + A`，或从托盘菜单启动截图。屏幕冻结后拖动选择区域，按 `Enter` 识别，按 `Esc` 取消。
+3. 默认矩形选区；设置中可选择自由圈选和松开鼠标后的确认行为。
+4. 识别结果窗口可复制文本、调用当前配置的翻译服务、重新截图；关闭设置/结果窗口不会关闭托盘代理。
+5. OpenAI 兼容翻译需要在设置中配置服务地址、模型和 API Key；未配置或请求失败时会显示错误信息。
 
 ## 5. 设置与配置
 
@@ -111,37 +175,24 @@ python scripts/build_exe.py
 
 ## 6. 技术选型说明
 
-**结论：Python + Tkinter + RapidOCR + keyboard + mss + pystray，PyInstaller 打包。**
+**当前代码形态：WinUI 3（C#）前端 + Python 后台代理 + 按需 OCR/翻译 worker。**
 
-| 候选方案 | 结论 | 原因 |
-|---|---|---|
-| C# WPF + Windows.Media.Ocr | 未选 | 依赖系统 OCR 语言包，中英日识别质量不可控；且环境无 .NET SDK |
-| Electron / Tauri | 未选 | 体积大 / 需 Rust 工具链，OCR 仍需外接 |
-| PySide6 / Qt（UI 迁移） | 未选（已评估） | 观感更原生，但打包体积 +约 100MB、需重写已通过测试的遮罩/面板/托盘交互与防崩溃逻辑；P0 改版目标在 Tkinter 内可达成（见「UI 改版说明」） |
-| **Python + Tkinter（选定）** | — | RapidOCR 内置离线 PP-OCR 模型（中/英/日识别实测优秀，无需语言包）；Tkinter 做 UI 极轻（无 Web 容器）；keyboard 库低级钩子全局热键；mss 截屏；pystray 托盘；开发与维护成本最低 |
+WinUI 负责设置、选区、结果显示与剪贴板；后台代理负责托盘、快捷键、配置和命名管道 IPC；worker 在任务期间加载 OCR/翻译依赖并在空闲后退出。Python/Tkinter 是早期原型实现，下面保留的历史说明不代表当前 WinUI 界面或运行流程。
 
-各组件角色：
-
-- **截图遮罩**：mss 冻结全屏 → Tkinter 无边框置顶全屏窗 → PIL 生成暗色底图 + 选区清晰层（RGBA alpha 遮罩实现"圈外变暗、圈内清晰"）；工具条以实际测量尺寸定位，按主显示器 / 选区所在显示器避让
-- **自由形状处理**：路径最小包围矩形 + 多边形 mask，路径外替换为白底（利于 OCR）
-- **OCR**：RapidOCR（PP-OCRv6 det/cls/rec，onnxruntime CPU 推理），启动后台预热，识别在工作线程执行
-- **翻译**：`TranslationProvider` 抽象（`GoogleFreeProvider` / `OpenAICompatProvider` / `NoneProvider`），requests/urllib 直连，全部可替换
-- **UI 主题**：`ui/theme.py` 统一颜色 / 字体 / 间距与控件状态机（悬停 / 按下 / 禁用），语义状态栏（info / busy / success / error）
-
-### 6.1 UI 改版说明（第三阶段）
-
-技术判断：先评估 Tkinter 能否达成目标外观，而非直接换框架。结论是**保留 Tkinter**——P0 目标（统一主题、显式模式工具条、布局层级、键盘可达、多显示器定位）均可实现；唯一硬性限制是**控件圆角**（Tk 需 Canvas 自绘，收益低于复杂度），故采用 flat + 细描边风格。若后续需要更接近原生的观感，可按「只替换 UI 层、保留 capture/ocr/translate/config」的接口边界迁移 Qt。
-
-关键界面截图见 `docs/screenshots/`：
-
-| 文件 | 内容 |
+| 组件 | 当前职责 |
 |---|---|
-| `overlay_modes.png` | 遮罩工具条空闲态：矩形 / 自由圈选两个显式入口 + 键位提示 |
-| `overlay_detail.png` | 拖动完成后的待确认状态：选区边框、`352 × 160` 尺寸反馈、避让后的确认/取消按钮 |
-| `result.png` | 结果面板：标题栏状态指示、识别文字卡片、翻译结果卡片、复制/翻译/重新截图 |
-| `settings.png` | 设置窗口：快捷键 / 翻译服务 / 隐私 三张分组卡片 |
+| WinUI 3 / C# | 设置窗口、截图遮罩、结果窗口与系统剪贴板 |
+| Python Agent | 托盘、全局热键、配置读写、命名管道服务、按需启动前端 |
+| Python Worker | OCR / 翻译任务；闲置后退出以释放模型和依赖内存 |
+| IPC | 当前用户限定的 Windows 命名管道，带版本号、请求 ID 和长度帧 |
 
-重新生成：`python scripts/demo_screenshots.py`。
+### 6.1 早期 Tkinter 原型记录（历史）
+
+本节只记录旧版 Python/Tkinter 原型背景；当前 UI 以 `winui/ScreenLens.WinUI` 为准。
+
+旧版 UI 调研材料仅作历史参考；其中描述的 Tk 控件、交互按钮和运行流程不代表当前 WinUI 版本。旧 Tk 原型截图已清理，避免与当前界面验收图混淆。
+
+当前 WinUI 页面与端到端验收截图见 `docs/screenshots/`；历史计划统一归档在 [`docs/PLAN.md`](docs/PLAN.md)。
 
 ## 7. 隐私说明（本地 vs 联网）
 
@@ -156,13 +207,13 @@ API Key 仅保存在本机 `config.json`，代码中无任何硬编码密钥。
 
 ## 8. 测试说明
 
-运行全部 83 个自动化测试：
+运行 Python 自动化测试：
 
 ```powershell
-python -m unittest discover -s tests -v
+.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-另可运行端到端验收脚本（合成真实热键 → 截图 → OCR → 复制 → 翻译 → 设置 → 退出，会自动备份并恢复用户配置）：
+旧版 Python/Tk 前端的端到端验收脚本仍在仓库中，不能代替当前 WinUI 的手工验收：
 
 ```powershell
 python scripts/acceptance_phase2.py
@@ -170,16 +221,7 @@ python scripts/acceptance_phase2.py
 
 覆盖范围：
 
-- **test_region**：矩形/路径包围盒、白底遮罩、alpha 预览、小图放大（9 项）
-- **test_ocr**：真实模型识别中/英/日/混合/空图（6 项）
-- **test_translate**：Provider 选择、未配置提示、免费接口真实翻译（en↔zh）、网络失败友好报错（11 项）
-- **test_config**：默认生成、保存重载、损坏回退、增量合并、结构校验（provider/语言/URL/热键）、原子写入无残留、UTF-8、旧配置自动补齐（18 项）
-- **test_gui_integration**：真实 Tk 事件驱动的截图遮罩交互（矩形/自由圈选/工具条模式切换/Enter 确认/工具条按钮确认/微小点击忽略/空 Enter 无副作用/Esc 取消）+ 多显示器布局约束（主显示器定位、避让原空闲位置的选区）+ 结果面板端到端 OCR 展示 + 翻译未启用引导提示（13 项）
-- **test_app_smoke**：Win32 API 合成真实按键验证全局热键触发、注册失败回滚、注销；完整应用子进程启动常驻 10 秒不崩溃（3 项）
-- **test_phase2_lifecycle**：旧任务迟到结果丢弃、关窗后无悬挂回调、翻译防重复提交、失败后按钮恢复、隐私提示文案、主线程调度器行为（10 项）
-- **test_settings_gui**：热键事件→快捷键串解析（修饰键/独立功能键/字母数字拒绝/Esc）、设置保存生效、取消不保存、非法 URL 拦截、热键失败回滚显示、恢复默认、录入流程、API Key 默认隐藏（16 项）
-
-自动化测试不依赖真实 API Key（在线 Provider 测试使用无 Key 的 google_free 且失败可跳过）；已按此原则通过全部用例。
+目前自动化用例主要覆盖 Python 配置、OCR、翻译、IPC 帧协议和 Agent 逻辑；WinUI 窗口、截图交互、多显示器 DPI 与真实在线 API 流程需要在 Windows 桌面环境手工验收。不要把旧测试数量或旧验收脚本结果当作当前 UI 的完整验收结论。
 
 ## 9. 已知问题与限制
 
@@ -189,10 +231,8 @@ python scripts/acceptance_phase2.py
 4. **日文识别**：使用 PP-OCR 中日通用模型，常规假名/汉字识别良好，极端艺术字体可能不如专用日文模型。
 5. **打包体积**：约 260MB（Python 运行时 + onnxruntime + OpenCV + 离线模型）；采用 onedir 而非单文件，保证常驻启动速度。
 6. **多显示器 / 混合 DPI**：遮罩按虚拟屏幕包围盒铺满；浮动工具条改为按**主显示器**（空闲态）或**选区所在显示器**（选区内）定位与避让，已有自动化布局测试覆盖。但**混合 DPI 缩放（如 100% + 200% 拼接）场景仍未实测**（复现步骤：外接不同缩放比例的第二显示器，在扩展屏上按热键圈选，观察遮罩与工具条位置）。
-7. **UI 圆角**：Tkinter 无原生圆角控件，界面采用 flat + 细描边风格（详见「UI 改版说明」）；如需圆角需迁移 Qt 或用 Canvas 自绘。
-8. **工具条"空闲时弱化"**：Tk 不支持控件级透明度，未实现淡出效果；改为以蓝色高亮当前模式 + 高对比文字表达状态。
-9. **选区确认多一步**：第三阶段改为「松开鼠标 → Enter 确认」，以避免误拖动直接触发识别；熟练用户可用 `Ctrl/右键拖动` 圈选后直接 `Enter`。
-10. **OCR 历史**：后续计划中的 P1 可选项，为控制范围未实现。
+7. **截图兼容性**：当前 WinUI 截图由 GDI BitBlt 实现；启用受保护/无重定向表面的应用可能无法被截取，详见前文抓屏边界说明。
+8. **桌面验收**：混合 DPI、多显示器切换、系统缩放和后台托盘唤起需在目标 Windows 设备实测。
 11. **托盘气泡通知**：Windows 通知中心被禁用时气泡可能不显示，会退化为弹窗。
 
 ## 10. 项目结构
@@ -201,54 +241,20 @@ python scripts/acceptance_phase2.py
 
 ```
 ScreenLens_AI_Agent/
-├── screenlens/             # 现有 Python 应用源码
+├── screenlens/             # Python Agent、Worker、IPC 与业务模块
+├── winui/                  # WinUI 3 前端与 Visual Studio 项目
 ├── tests/                  # 自动化测试
-├── scripts/                # 构建、验收与开发辅助脚本
+├── scripts/                # 构建、验收、测量与开发辅助脚本
 ├── assets/                 # 应用图标等资源
 ├── docs/
-│   ├── plans/              # 项目任务书、阶段计划与 UI 调研
-│   └── screenshots/        # 界面截图与验收材料
-├── winui/                  # WinUI 原型目录（初始为空，后续在此创建 VS 项目）
-├── run.py                  # 源码运行入口
-├── ScreenLens.pyw          # 无控制台运行入口
+│   ├── PLAN.md             # 唯一的项目计划、当前状态与历史计划归档
+│   └── screenshots/        # 当前 WinUI 页面与端到端验收截图
+├── run_agent.py            # 当前 Python 后台代理（控制台）
+├── run_agent.pyw           # 当前 Python 后台代理（无控制台）
+├── run_legacy.py           # 旧版 Tk 原型入口（控制台）
+├── run_legacy.pyw          # 旧版 Tk 原型入口（无控制台）
 └── requirements.txt        # Python 依赖
 ```
 
-`winui/` 当前仅预留给新的 C# / WinUI 原型；现有 Python 版仍是可运行主程序。
-
-```
-screenlens/
-├── app.py                    # 主应用（生命周期、热键→截图→结果 串联、设置应用与热键回滚）
-├── config.py                 # 配置（校验 + 原子写入 + 损坏回退提示）
-├── dispatch.py               # 主线程调度器（任意线程安全投递 UI 任务）
-├── hotkey.py                 # 全局热键管理（注册/替换/回滚）
-├── tray.py                   # 系统托盘（回调经主线程调度器）
-├── capture/
-│   ├── screen.py             # 全屏截图（mss，多显示器）
-│   ├── region.py             # 选区处理（包围盒/白底遮罩/放大）
-│   └── overlay.py            # 截图遮罩 UI（工具条模式选择/尺寸反馈/Enter 确认/避让定位）
-├── ocr/engine.py             # RapidOCR 封装（懒加载+预热）
-├── translate/
-│   ├── provider.py           # Provider 抽象与注册
-│   ├── google_free.py        # 免费谷歌翻译
-│   └── openai_compat.py      # OpenAI 兼容接口
-└── ui/
-    ├── theme.py              # 统一主题（颜色/字体/间距/按钮状态/语义状态栏）
-    ├── result_window.py      # OCR 结果面板（任务代际号/防重复提交/隐私提示）
-    └── settings_window.py    # 设置窗口（分组卡片/热键录入/Provider/内联反馈）
-tests/                        # 83 项自动化测试
-docs/screenshots/             # 关键界面截图（验收材料）
-scripts/
-    ├── build_exe.py          # PyInstaller 打包
-    ├── make_icon.py          # 图标生成
-    ├── demo_screenshots.py   # 生成关键界面截图
-    └── acceptance_phase2.py  # 端到端验收脚本
-dist/ScreenLens/ScreenLens.exe  # 可直接运行的成品
-```
-
-## 11. 后续建议（P2/P3 方向）
-
-- OCR 历史记录（默认本地、可关闭、提供清空入口）
-- 开机自启（注册表 HKCU Run）
-- 云端大模型 Provider（视觉理解 / 代码解释 / 公式识别）——Provider 架构已就绪
-- 多显示器 / 混合 DPI 实测与适配
+Python/Tk 源码保留为旧版原型；当前 Windows 桌面 UI 开发入口为 WinUI 解决方案。
+后续实施事项统一维护在 [`docs/PLAN.md`](docs/PLAN.md)，避免在 README 和多个计划文件中重复维护。

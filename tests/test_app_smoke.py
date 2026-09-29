@@ -75,7 +75,7 @@ class TestAppLaunch(unittest.TestCase):
         os.makedirs(env["APPDATA"], exist_ok=True)
 
         proc = subprocess.Popen(
-            [PYTHON, "-u", os.path.join(ROOT, "run.py")],
+            [PYTHON, "-u", os.path.join(ROOT, "run_legacy.py")],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             env=env, cwd=ROOT)
         try:

@@ -135,6 +135,11 @@ namespace ScreenLens.WinUI
 
         private void ShowToast(string message)
         {
+            if (!DispatcherQueue.HasThreadAccess)
+            {
+                DispatcherQueue.TryEnqueue(() => ShowToast(message));
+                return;
+            }
             ToastBar.Message = message;
             ToastBar.IsOpen = true;
             _toastTimer.Stop();

@@ -4,7 +4,8 @@ using System.Runtime.CompilerServices;
 namespace ScreenLens.WinUI.Models
 {
     /// <summary>
-    /// 快捷键演示条目：仅存在于内存中，不会注册到操作系统。
+    /// 快捷键条目：Editable = true 的条目接后端真实注册，
+    /// 其余为未实现能力，仅作展示。
     /// </summary>
     public sealed class HotkeyEntry : INotifyPropertyChanged
     {
@@ -16,6 +17,9 @@ namespace ScreenLens.WinUI.Models
         public string Icon { get; init; } = string.Empty;
         public string Action { get; init; } = string.Empty;
         public string Description { get; init; } = string.Empty;
+
+        /// <summary>是否可编辑（接后端 RegisterHotkey）。</summary>
+        public bool Editable { get; init; }
 
         private string _keys = string.Empty;
         public string Keys

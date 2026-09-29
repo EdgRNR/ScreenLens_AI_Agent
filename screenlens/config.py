@@ -108,6 +108,16 @@ def validate_config(data) -> list[str]:
             errors.append("api_key 必须是字符串")
         if not isinstance(oa.get("model", ""), str):
             errors.append("model 必须是字符串")
+
+        # 选择 OpenAI 兼容时缺参数，应在保存阶段就报错，
+        # 而不是等用户截图翻译时才失败。
+        if provider == "openai":
+            if not (base_url or "").strip():
+                errors.append("选择 OpenAI 兼容时需填写 API 地址（base_url）")
+            if not (oa.get("model") or "").strip():
+                errors.append("选择 OpenAI 兼容时需填写模型名（model）")
+            if not (oa.get("api_key") or "").strip():
+                errors.append("选择 OpenAI 兼容时需填写 API 密钥（api_key）")
     return errors
 
 
@@ -196,3 +206,23 @@ class Config:
 
     def as_dict(self) -> dict:
         return json.loads(json.dumps(self._data))
+
+    def apply_dict(self, data: dict) -> None:
+        """用提交的配置替换已知字段，保留磁盘上的未知字段后原子写回。
+
+        供 IPC SaveSettings 使用：磁盘文件里可能有本版本不认识的
+        字段（更高版本或手工编辑添加），整体替换会静默丢失它们，
+        因此以磁盘当前内容为基底做深度合并。
+        """
+        with self._lock:
+            disk: dict = {}
+            if os.path.isfile(self._path):
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        disk = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    disk = {}
+            if not isinstance(disk, dict):
+                disk = {}
+            self._data = _deep_merge(disk, data)
+            self.save()

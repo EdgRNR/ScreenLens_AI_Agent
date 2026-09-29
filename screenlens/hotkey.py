@@ -24,6 +24,8 @@ class HotkeyManager:
 
         失败时旧的注册保持不变。
         """
+        if self._current == hotkey:
+            return True, hotkey
         try:
             import keyboard
 

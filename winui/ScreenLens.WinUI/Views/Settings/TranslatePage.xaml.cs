@@ -13,12 +13,12 @@ namespace ScreenLens.WinUI.Views.Settings
             InitializeComponent();
         }
 
-        /// <summary>0 Google 免费 / 3 关闭：不显示连接参数表单。</summary>
+        /// <summary>仅 OpenAI 兼容（provider==1）显示连接参数表单。</summary>
         public Visibility ProviderFormVis(int provider)
-            => provider is 1 or 2 ? Visibility.Visible : Visibility.Collapsed;
+            => provider == 1 ? Visibility.Visible : Visibility.Collapsed;
 
-        /// <summary>仅「关闭翻译」时显示说明。</summary>
+        /// <summary>仅「关闭翻译」（provider==2）时显示说明。</summary>
         public Visibility ProviderOffVis(int provider)
-            => provider == 3 ? Visibility.Visible : Visibility.Collapsed;
+            => provider == 2 ? Visibility.Visible : Visibility.Collapsed;
     }
 }

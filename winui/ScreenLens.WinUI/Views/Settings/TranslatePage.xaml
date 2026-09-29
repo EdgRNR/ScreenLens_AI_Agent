@@ -11,10 +11,7 @@
     <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="翻译" Style="{StaticResource PageTitleText}" />
-        <TextBlock Text="截图识别文本的翻译服务（原型演示）" Style="{StaticResource PageSubtitleText}" />
-
-        <InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
-                 Title="原型界面" Message="尚未连接翻译服务，以下设置不会被保存、读取或发送。" Margin="0,0,0,8" />
+        <TextBlock Text="截图识别文本的翻译服务（设置经命名管道与后台代理同步，保存到本机配置）" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="目标语言" Style="{StaticResource SectionHeaderText}" />
         <controls:SettingCard Icon="&#xE774;" Title="翻译目标语言" Description="识别文本将被翻译为该语言">
@@ -22,25 +19,21 @@
                 <ComboBoxItem Content="简体中文" />
                 <ComboBoxItem Content="英语" />
                 <ComboBoxItem Content="日语" />
-                <ComboBoxItem Content="韩语" />
-                <ComboBoxItem Content="法语" />
             </ComboBox>
         </controls:SettingCard>
 
         <TextBlock Text="服务商" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE703;" Title="翻译服务" Description="选择「OpenAI 兼容」或「DeepSeek」显示连接参数；关闭后不显示表单">
+        <controls:SettingCard Icon="&#xE703;" Title="翻译服务" Description="Google 免费无需 API Key；OpenAI 兼容支持多家服务商；关闭后截图仅识别不翻译">
             <ComboBox SelectedIndex="{x:Bind Vm.Provider, Mode=TwoWay}" MinWidth="180">
                 <ComboBoxItem Content="Google 免费" />
                 <ComboBoxItem Content="OpenAI 兼容" />
-                <ComboBoxItem Content="DeepSeek" />
                 <ComboBoxItem Content="关闭翻译" />
             </ComboBox>
         </controls:SettingCard>
 
-        <!-- 连接参数：仅 OpenAI 兼容 / DeepSeek 显示 -->
+        <!-- 连接参数：仅 OpenAI 兼容时显示 -->
         <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16"
                 Visibility="{x:Bind ProviderFormVis(Vm.Provider), Mode=OneWay}">
-            <!-- 标签和输入框使用固定的两列关系，避免输入框因 MaxWidth 在整张卡片里居中悬浮。 -->
             <Grid RowSpacing="12" ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -53,18 +46,22 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.ColumnSpan="2" Text="连接参数（演示表单，不会保存）" Style="{StaticResource CardTitleText}" />
+                <TextBlock Grid.ColumnSpan="2" Text="连接参数（API Key 仅写入本地配置，绝不出现在日志或界面提示中）" Style="{StaticResource CardTitleText}" />
 
                 <TextBlock Grid.Row="1" Text="API 地址" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="1" PlaceholderText="https://api.example.com/v1"
+                <TextBox Grid.Row="1" Grid.Column="1"
+                         PlaceholderText="https://api.openai.com/v1"
+                         Text="{x:Bind Vm.OpenAiBaseUrl, Mode=TwoWay}"
                          HorizontalAlignment="Stretch" />
 
                 <TextBlock Grid.Row="2" Text="模型" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
                 <TextBox Grid.Row="2" Grid.Column="1" PlaceholderText="gpt-4o-mini"
+                         Text="{x:Bind Vm.OpenAiModel, Mode=TwoWay}"
                          HorizontalAlignment="Stretch" />
 
                 <TextBlock Grid.Row="3" Text="API 密钥" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
                 <PasswordBox Grid.Row="3" Grid.Column="1" PlaceholderText="sk-••••••••••••••••••••"
+                             Password="{x:Bind Vm.OpenAiApiKey, Mode=TwoWay}"
                              HorizontalAlignment="Stretch" PasswordRevealMode="Peek" />
             </Grid>
         </Border>
@@ -75,7 +72,7 @@
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <FontIcon Glyph="&#xE7E7;" FontSize="16" Foreground="{ThemeResource AppTextSecondaryBrush}" />
                 <TextBlock Style="{StaticResource CardDescText}" VerticalAlignment="Center"
-                           Text="翻译已关闭：截图仅识别文字，不进行翻译（演示状态）。" />
+                           Text="翻译已关闭：截图仅识别文字，不进行翻译。" />
             </StackPanel>
         </Border>
 
@@ -85,8 +82,8 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
-            <TextBlock Grid.Column="1" Text="原型提示：隐私说明——翻译时仅发送选区内识别到的文本，截图本身不会上传。"
-                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
+            <TextBlock Grid.Column="1" Text="隐私说明：翻译时仅发送选区内识别到的文本，截图本身不会上传；API Key 仅保存在本机配置文件中。"
+                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" TextWrapping="Wrap" />
         </Grid>
 
     </StackPanel>

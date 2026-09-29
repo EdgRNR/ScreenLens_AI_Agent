@@ -26,12 +26,21 @@
             <StackPanel VerticalAlignment="Center" Spacing="3">
                 <TextBlock Text="ScreenLens" FontSize="22" FontWeight="SemiBold"
                            Foreground="{ThemeResource AppTextPrimaryBrush}" />
-                <TextBlock Text="屏幕文字识别与翻译工具 · WinUI 原型版" Style="{StaticResource CardDescText}" />
+                <TextBlock Text="屏幕文字识别与翻译工具 · WinUI 前端" Style="{StaticResource CardDescText}" />
             </StackPanel>
         </StackPanel>
 
+        <TextBlock Text="运行状态" Style="{StaticResource SectionHeaderText}" />
+        <controls:SettingCard Icon="&#xE9D9;" Title="后台代理"
+                              Description="{x:Bind Vm.BackendStatus, Mode=OneWay}">
+            <Border VerticalAlignment="Center">
+                <TextBlock FontSize="13" FontFamily="Consolas"
+                           Text="{x:Bind Vm.BackendStatus, Mode=OneWay}" />
+            </Border>
+        </controls:SettingCard>
+
         <TextBlock Text="版本" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE8FD;" Title="当前版本" Description="0.1.0-prototype（WinUI 前端原型，未接入后端）">
+        <controls:SettingCard Icon="&#xE8FD;" Title="当前版本" Description="WinUI 前端 + Python 后台代理">
             <Button Content="检查更新" Click="OnCheckUpdateClick" />
         </controls:SettingCard>
 
@@ -40,14 +49,14 @@
             <HyperlinkButton Content="github.com/…/ScreenLens" Click="OnProjectLinkClick" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE9D9;" Title="技术栈" Description="WinUI 3 · Windows App SDK · XAML 原生控件，界面原型不包含 OCR / 截图 / 翻译能力">
+        <controls:SettingCard Icon="&#xE9D9;" Title="技术栈" Description="WinUI 3 · Windows App SDK · XAML 原生控件；OCR 本地 RapidOCR；翻译可选 Google 免费 / OpenAI 兼容">
             <HyperlinkButton Content="查看开发文档" Click="OnProjectLinkClick" />
         </controls:SettingCard>
 
         <TextBlock Text="声明" Style="{StaticResource SectionHeaderText}" />
         <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16">
             <TextBlock Style="{StaticResource CardDescText}" TextWrapping="Wrap"
-                       Text="本窗口为 ScreenLens 的前端界面原型，仅用于演示界面结构与交互。所有页面中的开关、下拉框与按钮只改变原型进程内的演示状态，不会读取或写入任何系统设置，也不会发起网络请求。" />
+                       Text="ScreenLens 由 WinUI 前端 + Python 后台代理两部分组成，前端通过命名管道与代理通信。截图、识别文本、API Key 不会写入日志；翻译请求只发送识别到的文本，截图本身不会上传。" />
         </Border>
 
     </StackPanel>

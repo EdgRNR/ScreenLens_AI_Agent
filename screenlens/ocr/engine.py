@@ -10,9 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 class OcrResult:
-    def __init__(self, lines: list[str], scores: list[float]):
+    def __init__(self, lines: list[str], scores: list[float],
+                 boxes: list | None = None):
         self.lines = lines        # 按阅读顺序排列的文本行
         self.scores = scores      # 每行的置信度
+        # 每行的四点轮廓 [[x, y] * 4]（图像像素坐标），可用于结果定位
+        self.boxes = boxes or []
 
     @property
     def text(self) -> str:
@@ -74,6 +77,15 @@ class OcrEngine:
         txts = result.txts if result.txts is not None else []
         scores = ([float(s) for s in result.scores]
                   if result.scores is not None else [1.0] * len(txts))
+        boxes = []
+        raw_boxes = getattr(result, "boxes", None)
+        if raw_boxes is not None:
+            for b in raw_boxes:
+                try:
+                    boxes.append([[float(p[0]), float(p[1])] for p in b])
+                except Exception:
+                    boxes.append(None)
         lines = [t.strip() for t in txts if t and t.strip()]
         kept_scores = [s for t, s in zip(txts, scores) if t and t.strip()]
-        return OcrResult(lines, kept_scores)
+        kept_boxes = [bx for t, bx in zip(txts, boxes) if t and t.strip()]
+        return OcrResult(lines, kept_scores, kept_boxes)

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using ScreenLens.WinUI.Models;
+using ScreenLens.WinUI.Services;
 using ScreenLens.WinUI.ViewModels;
 using Windows.Foundation;
 
@@ -13,12 +14,35 @@ namespace ScreenLens.WinUI.Views.Settings
         public HotkeysPage()
         {
             InitializeComponent();
+            Loaded += (_, _) => SyncFirstRow();
+            Vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(DemoSettings.HotkeyText))
+                {
+                    SyncFirstRow();
+                }
+            };
         }
 
-        /// <summary>编辑快捷键：ContentDialog 输入新组合，保存到内存演示值。</summary>
-        private void OnEditHotkeyClick(object sender, RoutedEventArgs e)
+        /// <summary>第一条「截图并翻译」绑定到 Vm.HotkeyText 真实值。</summary>
+        private void SyncFirstRow()
         {
-            if (sender is not FrameworkElement { DataContext: HotkeyEntry entry }) return;
+            Vm.Hotkeys[0].Keys = string.IsNullOrEmpty(Vm.HotkeyText)
+                ? "—" : Vm.HotkeyText;
+        }
+
+        /// <summary>编辑快捷键：仅 Editable=true 的条目接后端 RegisterHotkey。</summary>
+        private async void OnEditHotkeyClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { DataContext: HotkeyEntry entry })
+            {
+                return;
+            }
+            if (!entry.Editable)
+            {
+                Vm.ShowToast($"「{entry.Action}」当前版本未提供编辑能力。");
+                return;
+            }
 
             var input = new TextBox
             {
@@ -39,7 +63,7 @@ namespace ScreenLens.WinUI.Views.Settings
             };
 
             var op = dialog.ShowAsync();
-            op.Completed = (info, status) =>
+            op.Completed = async (info, status) =>
             {
                 if (status != AsyncStatus.Completed) return;
                 if (info.GetResults() != ContentDialogResult.Primary) return;
@@ -47,19 +71,36 @@ namespace ScreenLens.WinUI.Views.Settings
                 var keys = input.Text?.Trim();
                 if (string.IsNullOrWhiteSpace(keys)) return;
 
-                DispatcherQueue.TryEnqueue(() =>
+                DispatcherQueue.TryEnqueue(async () =>
                 {
-                    entry.Keys = keys;
-                    Vm.ShowToast($"已更新「{entry.Action}」的演示快捷键（不注册系统热键）");
+                    var err = await SettingsService.SaveHotkeyAsync(keys);
+                    if (err is null)
+                    {
+                        Vm.HotkeyText = keys;
+                        Vm.ShowToast($"已保存「{entry.Action}」快捷键并通知后台代理。");
+                    }
+                    else
+                    {
+                        Vm.ShowToast(err);
+                    }
                 });
             };
         }
 
-        /// <summary>恢复默认：重置所有演示值并刷新界面显示。</summary>
-        private void OnResetHotkeysClick(object sender, RoutedEventArgs e)
+        /// <summary>恢复默认：仅作用于第一条真实可编辑的热键。</summary>
+        private async void OnResetHotkeysClick(object sender, RoutedEventArgs e)
         {
-            Vm.ResetHotkeys();
-            Vm.ShowToast("已恢复默认快捷键（演示值已重置）");
+            const string defaultKey = "Ctrl + Alt + A";
+            var err = await SettingsService.SaveHotkeyAsync(defaultKey);
+            if (err is null)
+            {
+                Vm.HotkeyText = defaultKey;
+                Vm.ShowToast("已恢复默认快捷键（其余条目当前版本暂未提供）。");
+            }
+            else
+            {
+                Vm.ShowToast(err);
+            }
         }
     }
 }

@@ -11,7 +11,7 @@
     <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="通用" Style="{StaticResource PageTitleText}" />
-        <TextBlock Text="应用的基础行为设置（原型演示，更改仅保存在内存中）" Style="{StaticResource PageSubtitleText}" />
+        <TextBlock Text="应用的基础行为设置（主题为前端偏好，其他开关项暂未提供实际效果）" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="主题" Style="{StaticResource SectionHeaderText}" />
         <controls:SettingCard Icon="&#xE790;" Title="主题模式" Description="选择应用外观，切换后立即在当前窗口预览">
@@ -23,13 +23,12 @@
         </controls:SettingCard>
 
         <TextBlock Text="启动" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE7E8;" Title="开机自动启动" Description="登录 Windows 后自动运行 ScreenLens（原型演示：不修改系统启动项）">
+        <controls:SettingCard Icon="&#xE7E8;" Title="开机自动启动" Description="登录 Windows 后自动运行 ScreenLens（当前版本未实现，仅作入口）" IsEnabled="False">
             <ToggleSwitch IsOn="{x:Bind Vm.LaunchAtStartup, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE923;" Title="启动后最小化" Description="仅保留托盘图标，不显示主窗口；需先开启上方的开机自动启动（原型演示：仅内存状态）">
+        <controls:SettingCard Icon="&#xE923;" Title="启动后最小化" Description="仅保留托盘图标，不显示主窗口（需先开启上方的开机自动启动，当前版本未实现）" IsEnabled="False">
             <ToggleSwitch IsOn="{x:Bind Vm.StartMinimized, Mode=TwoWay}"
-                          IsEnabled="{x:Bind Vm.LaunchAtStartup, Mode=OneWay}"
                           OnContent="" OffContent="" />
         </controls:SettingCard>
 
@@ -44,8 +43,8 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
-            <TextBlock Grid.Column="1" Text="原型提示：本页开关均为演示状态，不会写入系统或配置文件。"
-                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
+            <TextBlock Grid.Column="1" Text="提示：「开机自动启动 / 启动后最小化」当前版本未提供实际能力，仅保留控件以展示后续版本规划。"
+                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" TextWrapping="Wrap" />
         </Grid>
 
     </StackPanel>

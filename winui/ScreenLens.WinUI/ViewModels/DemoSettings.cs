@@ -1,4 +1,5 @@
 using ScreenLens.WinUI.Models;
+using ScreenLens.WinUI.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -8,8 +9,14 @@ using System.Runtime.CompilerServices;
 namespace ScreenLens.WinUI.ViewModels
 {
     /// <summary>
-    /// 前端演示状态：仅存在于当前进程内存中，不做任何持久化。
-    /// 页面通过 x:Bind 双向绑定到本单例，控件操作即时反映。
+    /// 应用设置状态（历史名 DemoSettings，保留以减少 XAML 改动）。
+    ///
+    /// 数据边界：
+    /// - 后端字段（热键 / 翻译服务 / OpenAI 参数）经 SettingsService
+    ///   与 Python 配置双向同步，修改自动防抖保存；
+    /// - 前端偏好（主题 / 密度 / 强调色 / 截图交互 / 结果显示）存本地
+    ///   frontend.json，与 Python 配置完全隔离；
+    /// - 加载期间 _suppressPersist 抑制回写。
     /// </summary>
     public sealed class DemoSettings : INotifyPropertyChanged
     {
@@ -20,7 +27,8 @@ namespace ScreenLens.WinUI.ViewModels
         private void Raise([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        private bool Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+        private bool Set<T>(ref T field, T value,
+            [CallerMemberName] string? name = null)
         {
             if (EqualityComparer<T>.Default.Equals(field, value)) return false;
             field = value;
@@ -30,13 +38,101 @@ namespace ScreenLens.WinUI.ViewModels
 
         private DemoSettings() { }
 
-        // ---------- 通用 ----------
+        /// <summary>加载装配期间抑制自动保存回环。</summary>
+        internal bool SuppressPersist { get; set; }
+
+        // ================================================== 后端字段（Python 配置）
+
+        private string _hotkeyText = "Ctrl + Alt + A";
+        /// <summary>截图快捷键（显示格式）；保存走 RegisterHotkey 通道。</summary>
+        public string HotkeyText
+        {
+            get => _hotkeyText;
+            set => Set(ref _hotkeyText, value);
+        }
+
+        private int _targetLanguage; // 0=zh 1=en 2=ja
+        public int TargetLanguage
+        {
+            get => _targetLanguage;
+            set
+            {
+                if (Set(ref _targetLanguage, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveBackendDebounced(this);
+                }
+            }
+        }
+
+        /// <summary>0 = Google 免费，1 = OpenAI 兼容，2 = 关闭</summary>
+        private int _provider = 2;
+        public int Provider
+        {
+            get => _provider;
+            set
+            {
+                if (Set(ref _provider, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveBackendDebounced(this);
+                }
+            }
+        }
+
+        private string _openAiBaseUrl = "";
+        public string OpenAiBaseUrl
+        {
+            get => _openAiBaseUrl;
+            set
+            {
+                if (Set(ref _openAiBaseUrl, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveBackendDebounced(this);
+                }
+            }
+        }
+
+        private string _openAiModel = "gpt-4o-mini";
+        public string OpenAiModel
+        {
+            get => _openAiModel;
+            set
+            {
+                if (Set(ref _openAiModel, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveBackendDebounced(this);
+                }
+            }
+        }
+
+        private string _openAiApiKey = "";
+        /// <summary>API 密钥：仅用于设置编辑，绝不写日志或提示。</summary>
+        public string OpenAiApiKey
+        {
+            get => _openAiApiKey;
+            set
+            {
+                if (Set(ref _openAiApiKey, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveBackendDebounced(this);
+                }
+            }
+        }
+
+        // ================================================== 前端偏好（本地）
+
         /// <summary>0 = 跟随系统，1 = 浅色，2 = 深色（默认）</summary>
         private int _themeMode = 2;
         public int ThemeMode
         {
             get => _themeMode;
-            set { if (Set(ref _themeMode, value)) ThemeModeChanged?.Invoke(value); }
+            set
+            {
+                if (Set(ref _themeMode, value))
+                {
+                    if (!SuppressPersist) SettingsService.SaveFrontendDebounced(this);
+                    ThemeModeChanged?.Invoke(value);
+                }
+            }
         }
 
         public event Action<int>? ThemeModeChanged;
@@ -50,32 +146,74 @@ namespace ScreenLens.WinUI.ViewModels
         // ---------- 截图与选区 ----------
         /// <summary>0 = 矩形选区，1 = 自由圈选</summary>
         private int _defaultCaptureMode;
-        public int DefaultCaptureMode { get => _defaultCaptureMode; set => Set(ref _defaultCaptureMode, value); }
+        public int DefaultCaptureMode
+        {
+            get => _defaultCaptureMode;
+            set
+            {
+                if (Set(ref _defaultCaptureMode, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveFrontendDebounced(this);
+                }
+            }
+        }
 
-        /// <summary>开启：松开鼠标显示确认工具条；关闭：松开鼠标直接开始识别（演示中直接打开结果预览）</summary>
+        /// <summary>开启：松开鼠标显示确认工具条；关闭：松开鼠标直接开始识别</summary>
         private bool _confirmOnRelease = true;
-        public bool ConfirmOnRelease { get => _confirmOnRelease; set => Set(ref _confirmOnRelease, value); }
+        public bool ConfirmOnRelease
+        {
+            get => _confirmOnRelease;
+            set
+            {
+                if (Set(ref _confirmOnRelease, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveFrontendDebounced(this);
+                }
+            }
+        }
 
         // ---------- OCR 与结果 ----------
         /// <summary>0 = 跟随截图位置，1 = 屏幕居中，2 = 记住上次位置</summary>
         private int _resultPosition;
-        public int ResultPosition { get => _resultPosition; set => Set(ref _resultPosition, value); }
+        public int ResultPosition
+        {
+            get => _resultPosition;
+            set
+            {
+                if (Set(ref _resultPosition, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveFrontendDebounced(this);
+                }
+            }
+        }
 
         /// <summary>0 = 小，1 = 中（默认），2 = 大</summary>
         private int _originalFontSize = 1;
-        public int OriginalFontSize { get => _originalFontSize; set => Set(ref _originalFontSize, value); }
+        public int OriginalFontSize
+        {
+            get => _originalFontSize;
+            set
+            {
+                if (Set(ref _originalFontSize, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveFrontendDebounced(this);
+                }
+            }
+        }
 
         /// <summary>0 = 图标 + 文字，1 = 仅图标</summary>
         private int _copyButtonLook;
-        public int CopyButtonLook { get => _copyButtonLook; set => Set(ref _copyButtonLook, value); }
-
-        // ---------- 翻译 ----------
-        private int _targetLanguage;
-        public int TargetLanguage { get => _targetLanguage; set => Set(ref _targetLanguage, value); }
-
-        /// <summary>0 = Google 免费，1 = OpenAI 兼容，2 = DeepSeek，3 = 关闭</summary>
-        private int _provider = 2;
-        public int Provider { get => _provider; set => Set(ref _provider, value); }
+        public int CopyButtonLook
+        {
+            get => _copyButtonLook;
+            set
+            {
+                if (Set(ref _copyButtonLook, value) && !SuppressPersist)
+                {
+                    SettingsService.SaveFrontendDebounced(this);
+                }
+            }
+        }
 
         // ---------- 外观 ----------
         /// <summary>0 = 舒适（默认），1 = 紧凑</summary>
@@ -83,7 +221,14 @@ namespace ScreenLens.WinUI.ViewModels
         public int CardDensity
         {
             get => _cardDensity;
-            set { if (Set(ref _cardDensity, value)) CardDensityChanged?.Invoke(value); }
+            set
+            {
+                if (Set(ref _cardDensity, value))
+                {
+                    if (!SuppressPersist) SettingsService.SaveFrontendDebounced(this);
+                    CardDensityChanged?.Invoke(value);
+                }
+            }
         }
 
         public event Action<int>? CardDensityChanged;
@@ -92,34 +237,56 @@ namespace ScreenLens.WinUI.ViewModels
         public int AccentIndex
         {
             get => _accentIndex;
-            set { if (Set(ref _accentIndex, value)) AccentChanged?.Invoke(value); }
+            set
+            {
+                if (Set(ref _accentIndex, value))
+                {
+                    if (!SuppressPersist) SettingsService.SaveFrontendDebounced(this);
+                    AccentChanged?.Invoke(value);
+                }
+            }
         }
 
         /// <summary>强调色变化：由 App.ApplyAccent 应用到主题资源</summary>
         public event Action<int>? AccentChanged;
 
-        // ---------- 快捷键（演示值） ----------
+        // ---------- 快捷键 ----------
 
         public ObservableCollection<HotkeyEntry> Hotkeys { get; } = new()
         {
-            new HotkeyEntry { Icon = "\uE722", Action = "截图并翻译", Description = "启动区域截图，识别后立即翻译", Keys = "Ctrl + Alt + A" },
-            new HotkeyEntry { Icon = "\uE8A5", Action = "截图并识别", Description = "仅识别选区文字，不进行翻译", Keys = "Ctrl + Alt + O" },
-            new HotkeyEntry { Icon = "\uE713", Action = "打开设置", Description = "打开 ScreenLens 设置窗口", Keys = "Ctrl + Alt + S" },
-            new HotkeyEntry { Icon = "\uE7E7", Action = "退出截图", Description = "取消进行中的截图并关闭遮罩", Keys = "Esc" },
+            new HotkeyEntry { Icon = "\uE722", Action = "截图并翻译", Description = "启动区域截图，识别后立即翻译", Keys = "Ctrl + Alt + A", Editable = true },
+            new HotkeyEntry { Icon = "\uE8A5", Action = "截图并识别", Description = "仅识别选区文字，不进行翻译", Keys = "—", Editable = false },
+            new HotkeyEntry { Icon = "\uE713", Action = "打开设置", Description = "打开 ScreenLens 设置窗口", Keys = "—", Editable = false },
+            new HotkeyEntry { Icon = "\uE7E7", Action = "退出截图", Description = "取消进行中的截图并关闭遮罩", Keys = "Esc", Editable = false },
         };
 
         public void ResetHotkeys()
         {
             Hotkeys[0].Keys = "Ctrl + Alt + A";
-            Hotkeys[1].Keys = "Ctrl + Alt + O";
-            Hotkeys[2].Keys = "Ctrl + Alt + S";
-            Hotkeys[3].Keys = "Esc";
         }
 
-        // ---------- 轻量演示提示 ----------
+        // ---------- 后端状态 ----------
+
+        private bool _backendOnline;
+        /// <summary>后台代理是否在线（About 页状态展示）。</summary>
+        public bool BackendOnline
+        {
+            get => _backendOnline;
+            set => Set(ref _backendOnline, value);
+        }
+
+        private string _backendStatus = "未连接";
+        public string BackendStatus
+        {
+            get => _backendStatus;
+            set => Set(ref _backendStatus, value);
+        }
+
+        // ---------- 轻量提示 ----------
+
         public event Action<string>? ToastRequested;
 
-        /// <summary>对尚未实现的操作给出统一提示。</summary>
+        /// <summary>对操作结果给出统一提示。</summary>
         public void ShowToast(string message) => ToastRequested?.Invoke(message);
     }
 }
