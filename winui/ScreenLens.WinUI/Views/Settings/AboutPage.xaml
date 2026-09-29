@@ -30,15 +30,6 @@
             </StackPanel>
         </StackPanel>
 
-        <TextBlock Text="运行状态" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE9D9;" Title="后台代理"
-                              Description="{x:Bind Vm.BackendStatus, Mode=OneWay}">
-            <Border VerticalAlignment="Center">
-                <TextBlock FontSize="13" FontFamily="Consolas"
-                           Text="{x:Bind Vm.BackendStatus, Mode=OneWay}" />
-            </Border>
-        </controls:SettingCard>
-
         <TextBlock Text="版本" Style="{StaticResource SectionHeaderText}" />
         <controls:SettingCard Icon="&#xE8FD;" Title="当前版本" Description="WinUI 前端 + Python 后台代理">
             <Button Content="检查更新" Click="OnCheckUpdateClick" />

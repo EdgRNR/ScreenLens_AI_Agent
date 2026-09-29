@@ -59,6 +59,7 @@ namespace ScreenLens.WinUI.Services
 
             coordinator = new SingleInstanceCoordinator(mutex, pipeName,
                 dispatcher, activate);
+            App.WriteLifecycleLog("成为 WinUI 主实例");
             return true;
         }
 
@@ -67,24 +68,26 @@ namespace ScreenLens.WinUI.Services
         {
             var (_, pipeName) = GetIdentity();
             var payload = JsonSerializer.Serialize(args);
-            var deadline = DateTime.UtcNow.AddSeconds(4);
+            var deadline = DateTime.UtcNow.AddSeconds(2);
             while (DateTime.UtcNow < deadline && !cancellationToken.IsCancellationRequested)
             {
                 try
                 {
                     using var client = new NamedPipeClientStream(".", pipeName,
                         PipeDirection.InOut, PipeOptions.Asynchronous);
-                    using var connectTimeout = CancellationTokenSource
+                    // 同一个超时同时约束连接、写入后的 ACK 等待；旧实现只限制
+                    // ConnectAsync，ReadLineAsync 可能永久挂住热键启动的子进程。
+                    using var attemptTimeout = CancellationTokenSource
                         .CreateLinkedTokenSource(cancellationToken);
-                    connectTimeout.CancelAfter(250);
-                    await client.ConnectAsync(connectTimeout.Token);
+                    attemptTimeout.CancelAfter(600);
+                    await client.ConnectAsync(attemptTimeout.Token);
                     using var writer = new StreamWriter(client, new UTF8Encoding(false),
                         1024, leaveOpen: true) { AutoFlush = true };
                     using var reader = new StreamReader(client, Encoding.UTF8,
                         detectEncodingFromByteOrderMarks: false, 1024,
                         leaveOpen: true);
                     await writer.WriteLineAsync(payload);
-                    var ack = await reader.ReadLineAsync(cancellationToken);
+                    var ack = await reader.ReadLineAsync(attemptTimeout.Token);
                     return ack == "ok";
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -121,8 +124,12 @@ namespace ScreenLens.WinUI.Services
                     var line = await reader.ReadLineAsync(_stop.Token);
                     if (line is null) continue;
                     var args = JsonSerializer.Deserialize<string[]>(line) ?? [];
-                    _dispatcher.TryEnqueue(() => _activate(args));
-                    await writer.WriteLineAsync("ok");
+                    var queued = _dispatcher.TryEnqueue(() =>
+                    {
+                        App.WriteLifecycleLog("命名管道激活请求已进入 UI 队列");
+                        _activate(args);
+                    });
+                    await writer.WriteLineAsync(queued ? "ok" : "error");
                 }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested)
                 {

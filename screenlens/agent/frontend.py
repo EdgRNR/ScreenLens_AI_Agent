@@ -63,7 +63,9 @@ class FrontendManager:
 
     @property
     def exe_path(self) -> str | None:
-        if self._exe is None:
+        # Agent 常在 WinUI 首次构建前启动。不能把当时的“未找到”永久缓存，
+        # 否则之后即使 VS 已生成前端，热键也会一直启动失败。
+        if self._exe is None or not os.path.isfile(self._exe):
             self._exe = find_frontend_exe()
             if not self._exe:
                 logger.warning("未找到 WinUI 前端 exe（SCREENLENS_WINUI_EXE/"
@@ -96,7 +98,8 @@ class FrontendManager:
             self._procs[proc.pid] = {"proc": proc, "mode": mode}
         threading.Thread(target=self._waiter, args=(proc,),
                          daemon=True, name=f"frontend-{proc.pid}").start()
-        logger.info("前端已启动 mode=%s pid=%s", mode, proc.pid)
+        logger.info("前端激活请求进程已创建 mode=%s pid=%s exe=%s",
+                    mode, proc.pid, exe)
         return proc.pid
 
     def _waiter(self, proc: subprocess.Popen) -> None:

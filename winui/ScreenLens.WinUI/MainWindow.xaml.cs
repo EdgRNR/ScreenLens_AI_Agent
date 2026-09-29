@@ -153,7 +153,9 @@ namespace ScreenLens.WinUI
             if (tag == "CaptureDemo")
             {
                 // 打开截图选区演示窗口（不改变导航选中态）
-                new CaptureDemoWindow().Activate();
+                var demoWindow = new CaptureDemoWindow();
+                App.RegisterWindow(demoWindow);
+                demoWindow.Activate();
                 if (args.SelectedItem is NavigationViewItem footer)
                 {
                     footer.IsSelected = false;

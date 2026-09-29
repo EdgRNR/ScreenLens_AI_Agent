@@ -265,23 +265,6 @@ namespace ScreenLens.WinUI.ViewModels
             Hotkeys[0].Keys = "Ctrl + Alt + A";
         }
 
-        // ---------- 后端状态 ----------
-
-        private bool _backendOnline;
-        /// <summary>后台代理是否在线（About 页状态展示）。</summary>
-        public bool BackendOnline
-        {
-            get => _backendOnline;
-            set => Set(ref _backendOnline, value);
-        }
-
-        private string _backendStatus = "未连接";
-        public string BackendStatus
-        {
-            get => _backendStatus;
-            set => Set(ref _backendStatus, value);
-        }
-
         // ---------- 轻量提示 ----------
 
         public event Action<string>? ToastRequested;

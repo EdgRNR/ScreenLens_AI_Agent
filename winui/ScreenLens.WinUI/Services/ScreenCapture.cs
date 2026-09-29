@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -127,7 +128,9 @@ namespace ScreenLens.WinUI.Services
         private const int SRCCOPY = 0x00CC0020;
         private const int CAPTUREBLT = 0x40000000;
 
-        [DllImport("user32.dll")]
+        public static string LastError { get; private set; } = "尚未执行屏幕捕获";
+
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr GetDC(IntPtr hWnd);
 
         [DllImport("user32.dll")]
@@ -136,17 +139,17 @@ namespace ScreenLens.WinUI.Services
         [DllImport("user32.dll")]
         private static extern int GetSystemMetrics(int nIndex);
 
-        [DllImport("gdi32.dll")]
+        [DllImport("gdi32.dll", SetLastError = true)]
         private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
 
-        [DllImport("gdi32.dll")]
+        [DllImport("gdi32.dll", SetLastError = true)]
         private static extern IntPtr CreateCompatibleBitmap(
             IntPtr hdc, int nWidth, int nHeight);
 
         [DllImport("gdi32.dll")]
         private static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
 
-        [DllImport("gdi32.dll")]
+        [DllImport("gdi32.dll", SetLastError = true)]
         private static extern bool BitBlt(IntPtr hdcDest, int nXDest,
             int nYDest, int nWidth, int nHeight, IntPtr hdcSrc, int nXSrc,
             int nYSrc, int dwRop);
@@ -173,7 +176,7 @@ namespace ScreenLens.WinUI.Services
             public uint biClrImportant;
         }
 
-        [DllImport("gdi32.dll")]
+        [DllImport("gdi32.dll", SetLastError = true)]
         private static extern int GetDIBits(IntPtr hdc, IntPtr hbm, uint start,
             uint cLines, byte[] lpBits, ref BITMAPINFOHEADER lpbi, uint usage);
 
@@ -183,27 +186,46 @@ namespace ScreenLens.WinUI.Services
 
         private static VirtualScreenShot? Capture()
         {
+            LastError = "";
             var vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
             var vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
             var vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             var vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if (vw <= 0 || vh <= 0) return null;
+            if (vw <= 0 || vh <= 0)
+            {
+                LastError = $"虚拟屏幕尺寸无效：{vw}×{vh}，可能当前进程不在交互式桌面会话中。";
+                return null;
+            }
 
             var screenDc = GetDC(IntPtr.Zero);
-            if (screenDc == IntPtr.Zero) return null;
+            if (screenDc == IntPtr.Zero)
+            {
+                LastError = $"GetDC(桌面) 失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                return null;
+            }
             var memDc = IntPtr.Zero;
             var bmp = IntPtr.Zero;
             try
             {
                 memDc = CreateCompatibleDC(screenDc);
+                if (memDc == IntPtr.Zero)
+                {
+                    LastError = $"CreateCompatibleDC 失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                    return null;
+                }
                 bmp = CreateCompatibleBitmap(screenDc, vw, vh);
-                if (bmp == IntPtr.Zero) return null;
+                if (bmp == IntPtr.Zero)
+                {
+                    LastError = $"CreateCompatibleBitmap({vw}×{vh}) 失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                    return null;
+                }
                 var old = SelectObject(memDc, bmp);
                 try
                 {
                     if (!BitBlt(memDc, 0, 0, vw, vh, screenDc, vx, vy,
                             SRCCOPY | CAPTUREBLT))
                     {
+                        LastError = $"BitBlt 捕获屏幕失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
                         return null;
                     }
                 }
@@ -224,7 +246,11 @@ namespace ScreenLens.WinUI.Services
                 var pixels = new byte[vw * vh * 4];
                 var copied = GetDIBits(memDc, bmp, 0, (uint)vh, pixels,
                     ref bmi, 0);
-                if (copied != vh) return null;
+                if (copied != vh)
+                {
+                    LastError = $"GetDIBits 只读取到 {copied}/{vh} 行：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                    return null;
+                }
                 return new VirtualScreenShot(vw, vh, vx, vy, pixels);
             }
             finally

@@ -99,15 +99,21 @@ class HeadlessAgent:
             self._release_agent_mutex()
             return 0
 
+        startup_notices = []
         if self.config.load_error:
-            self._notify(f"配置文件存在以下问题，已回退默认值：\n"
-                         f"{self.config.load_error}\n\n"
-                         "可打开「设置」重新保存配置。")
+            startup_notices.append(
+                f"配置文件存在以下问题，已回退默认值：\n"
+                f"{self.config.load_error}\n\n"
+                "可打开「设置」重新保存配置。")
         ok, msg = self.hotkeys.register(self.config.hotkey)
         if not ok:
-            self._notify(f"快捷键注册失败：{msg}\n请在「设置」中更换快捷键。")
+            startup_notices.append(
+                f"快捷键注册失败：{msg}\n请在「设置」中更换快捷键。")
 
         self._start_tray()
+        # 托盘初始化前 _notify 只能写日志，通知会悄悄丢失；启动完托盘后再显示。
+        for notice in startup_notices:
+            self._notify(notice)
 
         self._server = PipeServer(PIPE_NAME, self._handle_connection)
         try:
@@ -185,6 +191,7 @@ class HeadlessAgent:
 
     def _on_hotkey(self) -> None:
         """keyboard 钩子线程调用；直接启动前端，无 Tk 依赖。"""
+        logger.info("收到全局截图快捷键，准备启动 WinUI 截图流程")
         self._launch_capture()
 
     def _launch_capture(self) -> None:
@@ -193,7 +200,13 @@ class HeadlessAgent:
                 return
             pid = self.frontends.launch("capture")
             if pid is None:
-                logger.info("截图前端未启动（未找到 exe / 已在截图流程中）")
+                exe = self.frontends.exe_path
+                if exe is None:
+                    message = "截图未启动：找不到 WinUI 前端程序。请先在 Visual Studio 构建并运行一次。"
+                else:
+                    message = "截图未启动：WinUI 前端进程启动失败。请查看 %LOCALAPPDATA%\\ScreenLens\\logs\\agent.log。"
+                logger.error("%s (exe=%s)", message, exe)
+                self._notify(message)
 
     def _notify(self, message: str):
         logger.info("notify: %s", message.splitlines()[0])

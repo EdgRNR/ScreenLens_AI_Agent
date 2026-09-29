@@ -1,6 +1,7 @@
 using ScreenLens.WinUI.ViewModels;
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -292,9 +293,17 @@ namespace ScreenLens.WinUI.Services
 
         // -------------------------------------------------------- 热键格式
 
-        /// <summary>"Ctrl + Alt + A" → "ctrl+alt+a"（keyboard 库格式）。</summary>
+        /// <summary>"Ctrl + Alt + Page Up" → "ctrl+alt+page up"（keyboard 库格式）。</summary>
         public static string DisplayToKeyboard(string display)
-            => (display ?? "").Replace(" ", "").ToLowerInvariant();
+            => string.Join("+", (display ?? "").Split('+',
+                StringSplitOptions.RemoveEmptyEntries)
+                .Select(part =>
+                {
+                    var normalized = part.Trim().ToLowerInvariant();
+                    // keyboard 库的  键名为 ；配置串也用 + 分隔，
+                    // 所以 UI 录制时用 Plus 表示，再在这里映射到其别名。
+                    return normalized == "plus" ? "add" : normalized;
+                }));
 
         /// <summary>"ctrl+alt+a" → "Ctrl + Alt + A"（界面显示格式）。</summary>
         public static string KeyboardToDisplay(string kb)

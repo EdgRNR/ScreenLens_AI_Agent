@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
@@ -401,7 +402,18 @@ namespace ScreenLens.WinUI.Views.Capture
                     catch { /* 忽略调试写入失败 */ }
                 }
 
-                var resp = await BackendClient.Instance.CallAsync(
+                JsonObject resp;
+
+                // 截图遮罩先于后台初始化出现。连接/加载配置放在用户确认后，
+                // 这样后台未运行时仍能选择区域，并在识别前得到明确的错误提示。
+                var startupError = await BackendBootstrapper.EnsureRunningAsync();
+                if (startupError is not null)
+                    throw new BackendException("agent_unavailable", startupError);
+                var settingsError = await SettingsService.LoadBackendAsync(_vm);
+                if (settingsError is not null)
+                    throw new BackendException("agent_unavailable", settingsError);
+
+                resp = await BackendClient.Instance.CallAsync(
                     "RecognizeImage", null, png, timeoutMs: 90_000);
 
                 // 裁剪已完成：立即释放整幅像素与显示位图（几十 MiB），

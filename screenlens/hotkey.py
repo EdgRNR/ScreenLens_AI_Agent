@@ -62,6 +62,7 @@ class HotkeyManager:
 
     def _fire(self):
         try:
+            logger.info("global hotkey triggered: %s", self._current)
             self._on_triggered()
         except Exception:
             logger.exception("hotkey callback error")
