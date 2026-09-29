@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Microsoft.UI.Windowing;
 using ScreenLens.WinUI.ViewModels;
 using ScreenLens.WinUI.Views.Preview;
 using System;
@@ -45,6 +46,15 @@ namespace ScreenLens.WinUI
         {
             InitializeComponent();
 
+            // 把应用内容延伸到标题栏区域；该区域仍由 Windows 提供系统窗口控制按钮。
+            if (AppWindowTitleBar.IsCustomizationSupported())
+            {
+                AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
+                AppWindow.TitleBar.IconShowOptions = IconShowOptions.HideIconAndSystemMenu;
+                AppWindow.TitleBar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+                SetTitleBar(CustomTitleBar);
+            }
+
             // 默认窗口尺寸（后续仍可自由调整）
             ResizeToLogicalSize(1180, 760);
 
@@ -53,6 +63,8 @@ namespace ScreenLens.WinUI
             {
                 var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ScreenLens.ico");
                 if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
+
+                // 任务栏 / exe 图标不受自定义标题栏影响。
             }
             catch
             {
@@ -60,6 +72,7 @@ namespace ScreenLens.WinUI
             }
 
             // 默认深色主题，并跟随主题模式即时预览
+            RootGrid.ActualThemeChanged += (_, _) => ApplyTitleBarTheme();
             ApplyTheme(_vm.ThemeMode);
             _vm.ThemeModeChanged += ApplyTheme;
 
@@ -75,13 +88,50 @@ namespace ScreenLens.WinUI
             ContentFrame.Navigate(_lastPageType);
         }
 
-        private void ApplyTheme(int mode) =>
+        private void ApplyTheme(int mode)
+        {
             RootGrid.RequestedTheme = mode switch
             {
                 1 => ElementTheme.Light,
                 2 => ElementTheme.Dark,
                 _ => ElementTheme.Default,
             };
+
+            ApplyTitleBarTheme();
+        }
+
+        private void ApplyTitleBarTheme()
+        {
+            if (!AppWindowTitleBar.IsCustomizationSupported()) return;
+
+            bool isLight = RootGrid.ActualTheme == ElementTheme.Light;
+            var background = isLight
+                ? Windows.UI.Color.FromArgb(255, 243, 243, 243)
+                : Windows.UI.Color.FromArgb(255, 31, 31, 31);
+            var foreground = isLight
+                ? Windows.UI.Color.FromArgb(255, 26, 26, 26)
+                : Windows.UI.Color.FromArgb(255, 242, 242, 242);
+            var hover = isLight
+                ? Windows.UI.Color.FromArgb(255, 225, 225, 225)
+                : Windows.UI.Color.FromArgb(255, 55, 55, 55);
+            var pressed = isLight
+                ? Windows.UI.Color.FromArgb(255, 210, 210, 210)
+                : Windows.UI.Color.FromArgb(255, 70, 70, 70);
+
+            var titleBar = AppWindow.TitleBar;
+            titleBar.BackgroundColor = background;
+            titleBar.ForegroundColor = foreground;
+            titleBar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            titleBar.ButtonForegroundColor = foreground;
+            titleBar.ButtonHoverBackgroundColor = hover;
+            titleBar.ButtonHoverForegroundColor = foreground;
+            titleBar.ButtonPressedBackgroundColor = pressed;
+            titleBar.ButtonPressedForegroundColor = foreground;
+            titleBar.InactiveBackgroundColor = background;
+            titleBar.InactiveForegroundColor = foreground;
+            titleBar.ButtonInactiveBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            titleBar.ButtonInactiveForegroundColor = foreground;
+        }
 
         private void ShowToast(string message)
         {

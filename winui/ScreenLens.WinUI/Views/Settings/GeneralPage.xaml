@@ -27,8 +27,10 @@
             <ToggleSwitch IsOn="{x:Bind Vm.LaunchAtStartup, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE923;" Title="启动后最小化" Description="仅保留托盘图标，不显示主窗口（原型演示：仅内存状态）" IsEnabled="{x:Bind Vm.LaunchAtStartup, Mode=OneWay}">
-            <ToggleSwitch IsOn="{x:Bind Vm.StartMinimized, Mode=TwoWay}" OnContent="" OffContent="" />
+        <controls:SettingCard Icon="&#xE923;" Title="启动后最小化" Description="仅保留托盘图标，不显示主窗口；需先开启上方的开机自动启动（原型演示：仅内存状态）">
+            <ToggleSwitch IsOn="{x:Bind Vm.StartMinimized, Mode=TwoWay}"
+                          IsEnabled="{x:Bind Vm.LaunchAtStartup, Mode=OneWay}"
+                          OnContent="" OffContent="" />
         </controls:SettingCard>
 
         <TextBlock Text="语言" Style="{StaticResource SectionHeaderText}" />
@@ -36,8 +38,15 @@
             <Button Content="了解可用语言" Click="OnPendingClick" />
         </controls:SettingCard>
 
-        <TextBlock Text="&#xE946; 原型提示：本页开关均为演示状态，不会写入系统或配置文件。"
-                   Style="{StaticResource DemoNoteText}" Margin="0,12,0,0" />
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+            <TextBlock Grid.Column="1" Text="原型提示：本页开关均为演示状态，不会写入系统或配置文件。"
+                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
+        </Grid>
 
     </StackPanel>
 </Page>

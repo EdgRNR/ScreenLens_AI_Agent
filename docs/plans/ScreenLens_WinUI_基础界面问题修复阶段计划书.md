@@ -142,7 +142,7 @@ dotnet build winui\ScreenLens.WinUI\ScreenLens.WinUI.csproj `
 - `ScreenLens.WinUI.csproj` ✎：新增 `<ApplicationIcon>Assets\ScreenLens.ico</ApplicationIcon>`（exe 内嵌图标）并把 ico 纳入 Content。
 - `MainWindow.xaml.cs` ✎：构造时 `AppWindow.SetIcon(<应用目录>\Assets\ScreenLens.ico)`，未打包运行时也能显式设置窗口/任务栏图标。
 
-**验证**：`taskbar_apps_phase7.png`（运行中应用区放大 6 倍）中 ScreenLens 图标与相邻应用（ChatGPT、Discord、小米等）视觉尺寸相当且更饱满；`taskbar_phase7.png` 为整条任务栏对照。图形在图标内的占比由约 64% 提升到 92%（32px 以上）／100%（≤32px）。
+**验证**：`taskbar_apps_phase7.png`（运行中应用区放大 6 倍）中 ScreenLens 图标与相邻应用（ChatGPT、Discord、小米等）视觉尺寸相当且更饱满；图形在图标内的占比由约 64% 提升到 92%（32px 以上）／100%（≤32px）。后续为避免桌面媒体卡片信息进入仓库，已将 `taskbar_phase7.png` 替换为任务栏应用区的安全裁切图。
 
 ### P1：统一页面基础布局与细节
 
@@ -179,7 +179,7 @@ dotnet build winui\ScreenLens.WinUI\ScreenLens.WinUI.csproj `
 | `ScreenLens设置_Translate_max_phase7.png` | 最大化：卡片等宽且内容左对齐 |
 | `ScreenLens设置_Appearance_light_phase7.png` | 浅色主题 + 通知浮层不推动内容 |
 | `ScreenLens设置_About_light_phase7.png` | 浅色主题下 Logo 与卡片对比度 |
-| `taskbar_phase7.png` / `taskbar_apps_phase7.png` | 任务栏整条 / 运行中应用区（放大 6 倍）对照 |
+| `taskbar_phase7.png` | ScreenLens 与相邻任务栏应用图标对照的安全裁切图，不含整条任务栏的媒体卡片和系统托盘信息 |
 
 ### 构建与运行验证
 
@@ -193,3 +193,12 @@ dotnet build winui\ScreenLens.WinUI\ScreenLens.WinUI.csproj `
 - **任务栏自动隐藏 / 深色浅色任务栏**：未逐一枚举系统任务栏主题设置组合。
 - 原型功能保持演示状态：开机启动、设置持久化、托盘、真实截图/OCR/翻译均未接入（与本阶段边界一致）。
 - 本阶段未改动 `screenlens/`、`tests/`、`run.py` 与后端接口；`logo.png` 源文件保持不变。
+
+## 8. 后续界面细节修正（2026-09-29）
+
+- 翻译服务参数改为统一的标签 / 输入框两列布局，输入控件左边缘一致，不再在卡片内横向居中悬浮。
+- 固定左侧导航为展开状态并隐藏折叠按钮；标题栏隐藏重复的窗口 Logo，侧栏仍保留品牌 Logo，应用 / 任务栏图标保持不变。
+- `启动后最小化` 卡片本身保持正常显示，只禁用开关；为深色 / 浅色主题提供可辨识的禁用轨道颜色。UI Automation 检查两个开关控件布局边界均为 78×60 物理像素。
+- 任务栏截图脚本现在仅保存 ScreenLens 图标附近的应用区域，不再输出整条任务栏；旧的带媒体标题截图已由安全裁切版本替代。
+- 本轮 x64 Debug 构建 0 警告、0 错误；运行实例响应正常，UI Automation 检查七个导航项均保持同一完整宽度，翻译标签与输入框处于固定列。
+- 当前执行环境的 `Graphics.CopyFromScreen` 返回“句柄无效”，因此未能在这轮生成新的运行截图；浅色禁用轨道的最终视觉效果仍需在可截图的桌面会话中目视确认。截图脚本已补充浅色主题选项以便复验。

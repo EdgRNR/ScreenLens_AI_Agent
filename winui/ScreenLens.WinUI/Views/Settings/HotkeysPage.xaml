@@ -38,8 +38,15 @@
 
         <Button Content="恢复默认快捷键" Click="OnResetHotkeysClick" Margin="0,8,0,0" />
 
-        <TextBlock Text="&#xE946; 原型提示：编辑会更新此页显示的演示值；关闭应用后恢复默认，不会影响操作系统快捷键。"
-                   Style="{StaticResource DemoNoteText}" Margin="0,12,0,0" />
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+            <TextBlock Grid.Column="1" Text="原型提示：编辑会更新此页显示的演示值；关闭应用后恢复默认，不会影响操作系统快捷键。"
+                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
+        </Grid>
 
     </StackPanel>
 </Page>

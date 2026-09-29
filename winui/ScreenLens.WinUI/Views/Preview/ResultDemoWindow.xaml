@@ -84,8 +84,15 @@ Esc 取消本次截图</TextBlock>
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="&#xE946; 演示数据：以上文本为固定样例，不代表真实识别或翻译结果；复制不会写入剪贴板。"
-                           Style="{StaticResource DemoNoteText}" Margin="0,4,0,12" />
+                <Grid Margin="0,4,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+                    <TextBlock Grid.Column="1" Text="演示数据：以上文本为固定样例，不代表真实识别或翻译结果；复制不会写入剪贴板。"
+                               Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
+                </Grid>
 
             </StackPanel>
         </ScrollViewer>

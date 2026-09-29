@@ -41,6 +41,11 @@
             <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
             <SolidColorBrush x:Key="ScreenLensAccentHoverBrush" Color="#5CA8FF" />
             <SolidColorBrush x:Key="ScreenLensAccentPressedBrush" Color="#2B7FE0" />
+
+            <!-- 禁用的 ToggleSwitch 仍保留可辨识的轨道，避免浅色卡片上只剩灰色圆点。 -->
+            <SolidColorBrush x:Key="ToggleSwitchFillOffDisabled" Color="#F4F4F4" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOffDisabled" Color="#858585" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOffDisabled" Color="#858585" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -74,6 +79,11 @@
             <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
             <SolidColorBrush x:Key="ScreenLensAccentHoverBrush" Color="#5CA8FF" />
             <SolidColorBrush x:Key="ScreenLensAccentPressedBrush" Color="#2B7FE0" />
+
+            <!-- 深色禁用态同样保留轨道轮廓，但与可交互开关保持明显区分。 -->
+            <SolidColorBrush x:Key="ToggleSwitchFillOffDisabled" Color="#292929" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOffDisabled" Color="#737373" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOffDisabled" Color="#737373" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
@@ -92,7 +102,8 @@
     <x:Double x:Key="TextSizeBadge">12</x:Double>
 
     <!-- 8px 间距节奏 -->
-    <Thickness x:Key="PagePadding">32,28,32,32</Thickness>
+    <!-- 内容标题与侧栏第一项顶部对齐，保留左右与底部留白。 -->
+    <Thickness x:Key="PagePadding">32,0,32,32</Thickness>
     <x:Double x:Key="SpaceXS">4</x:Double>
     <x:Double x:Key="SpaceS">8</x:Double>
     <x:Double x:Key="SpaceM">16</x:Double>

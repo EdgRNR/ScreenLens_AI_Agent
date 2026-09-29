@@ -14,36 +14,46 @@
     </Window.SystemBackdrop>
 
     <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
         <Grid.Resources>
             <!-- 设置页内容区宽度上限：保证各页卡片等宽且左对齐 -->
             <conv:WidthClampConverter x:Key="ClampContentWidth" MaxWidth="1000" />
         </Grid.Resources>
 
+        <!-- 自定义沉浸式标题栏：品牌区与侧栏同色，右侧与页面同色；系统标题文字不再单独占一条原生黑栏。 -->
+        <Grid x:Name="CustomTitleBar" Grid.Row="0" Height="48">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="212" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="{ThemeResource AppWindowBgBrush}">
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="16,0,12,0" VerticalAlignment="Center">
+                    <Image Source="ms-appx:///Assets/BrandLogo.png" Width="28" Height="28" />
+                    <TextBlock Text="ScreenLens 设置"
+                               FontWeight="SemiBold"
+                               FontSize="14"
+                               Foreground="{ThemeResource AppTextPrimaryBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Background="{ThemeResource AppWindowBgBrush}" />
+        </Grid>
+
         <!-- 导航始终占满客户区：通知以覆盖层显示，不推移布局 -->
         <NavigationView
             x:Name="Nav"
+            Grid.Row="1"
             IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
             IsSettingsVisible="False"
             PaneDisplayMode="Left"
+            IsPaneOpen="True"
             OpenPaneLength="212"
             SelectionChanged="OnNavSelectionChanged"
             Background="Transparent">
-
-            <NavigationView.PaneHeader>
-                <!-- 品牌区域：正式 Logo -->
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="16,16,16,12">
-                    <Image
-                        Source="ms-appx:///Assets/BrandLogo.png"
-                        Width="28" Height="28"
-                        VerticalAlignment="Center" />
-                    <TextBlock
-                        Text="ScreenLens"
-                        FontWeight="SemiBold"
-                        FontSize="15"
-                        Foreground="{ThemeResource AppTextPrimaryBrush}"
-                        VerticalAlignment="Center" />
-                </StackPanel>
-            </NavigationView.PaneHeader>
 
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="通用" Tag="General" IsSelected="True">
@@ -107,6 +117,7 @@
              出现/关闭不改变任何页面元素的测量尺寸 -->
         <InfoBar
             x:Name="ToastBar"
+            Grid.Row="1"
             IsOpen="False"
             IsClosable="True"
             Severity="Informational"

@@ -45,7 +45,6 @@ namespace ScreenLens.WinUI.Views.Preview
 
             Root.SizeChanged += OnRootSizeChanged;
             Root.Loaded += (_, _) => HitLayer.Focus(FocusState.Programmatic);
-            Activate();
 
             // 初始预置选区，便于直接看到遮罩 / 尺寸 / 工具条效果
             _sel = new Rect(180, 190, 460, 220);

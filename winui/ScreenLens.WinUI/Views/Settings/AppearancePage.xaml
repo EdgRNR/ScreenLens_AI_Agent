@@ -68,8 +68,15 @@
             <Button Content="了解系统缩放" Click="OnPendingClick" />
         </controls:SettingCard>
 
-        <TextBlock Text="&#xE946; 原型提示：本页设置仅保存在内存中，关闭应用后恢复默认。"
-                   Style="{StaticResource DemoNoteText}" Margin="0,12,0,0" />
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+            <TextBlock Grid.Column="1" Text="原型提示：本页设置仅保存在内存中，关闭应用后恢复默认。"
+                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
+        </Grid>
 
     </StackPanel>
 </Page>

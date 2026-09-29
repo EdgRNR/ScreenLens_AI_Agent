@@ -11,6 +11,10 @@
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\capture_winui_screenshots.ps1 `
       -Pages General,About,Capture,Hotkeys -Suffix _phase7
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File scripts\capture_winui_screenshots.ps1 `
+      -Pages General -Theme Light -Suffix _light
 #>
 param(
     [string[]]$Pages = @("General", "About", "Capture", "Hotkeys"),
@@ -22,7 +26,10 @@ param(
     [string]$Size = "",
     # 可选：截图前最大化窗口
     [switch]$Maximize,
-    # 可选：额外汇出任务栏截图（用于核对任务栏图标视觉尺寸）
+    # 可选：在通用页切换主题，便于验收浅色 / 深色控件状态
+    [ValidateSet("", "Light", "Dark")]
+    [string]$Theme = "",
+    # 可选：额外汇出只包含 ScreenLens 和相邻应用图标的任务栏截图；不截整条任务栏
     [switch]$Taskbar,
     # 任务栏截图放大倍数（默认 3 倍，便于人工核对图标比例）
     [int]$TaskbarZoom = 3
@@ -31,8 +38,10 @@ param(
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Windows.Forms
 
 $ErrorActionPreference = "Stop"
+$Pages = @($Pages | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 
 $outDir = Join-Path (Split-Path -Parent $PSScriptRoot) "docs\screenshots"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
@@ -98,6 +107,40 @@ function Invoke-NavItem($window, $name) {
         return $false
     }
     return $true
+}
+
+function Set-GeneralTheme($window, $themeName) {
+    $themeLabel = if ($themeName -eq "Light") { "浅色" } else { "深色" }
+    $comboCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::ComboBox)
+    $combos = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $comboCond)
+    if (-not $combos -or $combos.Count -lt 1) { throw "通用页未找到主题下拉框。" }
+
+    $combo = $combos.Item(0)
+    $expand = $null
+    if (-not $combo.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$expand)) {
+        throw "主题下拉框不支持展开。"
+    }
+    $expand.Expand()
+    Start-Sleep -Milliseconds 250
+
+    $optionCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::NameProperty, $themeLabel)
+    $option = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $optionCond)
+    if (-not $option) { throw "主题下拉框中未找到选项：$themeLabel" }
+
+    $pattern = $null
+    if ($option.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) {
+        $pattern.Select()
+    }
+    elseif ($option.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
+        $pattern.Invoke()
+    }
+    else {
+        throw "主题选项 $themeLabel 不支持选中。"
+    }
+    Start-Sleep -Milliseconds 500
 }
 
 function Save-WindowShot($proc, $window, $fileName) {
@@ -168,6 +211,7 @@ foreach ($page in $Pages) {
 
     Show-Window $proc
     if (-not (Invoke-NavItem $window $label)) { continue }
+    if ($page -eq "General" -and $Theme) { Set-GeneralTheme $window $Theme }
     Start-Sleep -Milliseconds $SettleMs
     Show-Window $proc
     Start-Sleep -Milliseconds 300
@@ -175,13 +219,26 @@ foreach ($page in $Pages) {
 }
 
 if ($Taskbar) {
-    # 任务栏图标核对：截取任务栏整条并放大，便于与同排应用图标比较视觉尺寸。
-    # 用 UI Automation 定位（返回物理像素，且不受 PowerShell 进程 DPI 虚拟化影响）。
+    # 任务栏核对只保留 ScreenLens 按钮附近区域，避免把桌面媒体卡片、头像和系统托盘信息写入仓库。
+    # UI Automation 坐标是物理像素，不受 PowerShell 进程 DPI 虚拟化影响。
     $trayCond = New-Object System.Windows.Automation.PropertyCondition(
         [System.Windows.Automation.AutomationElement]::ClassNameProperty, "Shell_TrayWnd")
-    $tray = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $trayCond)
+    $tray = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $trayCond)
     if (-not $tray) {
-        Write-Warning "未找到任务栏窗口，跳过任务栏截图"
+        # 某些 UIA 桌面会话不把任务栏暴露给 RootElement；由主屏幕工作区推算底部任务栏区域。
+        $screen = [System.Windows.Forms.Screen]::PrimaryScreen
+        $bounds = $screen.Bounds
+        $work = $screen.WorkingArea
+        if ($work.Bottom -lt $bounds.Bottom) {
+            $left = $bounds.Left
+            $top = $work.Bottom
+            $w = $bounds.Width
+            $h = $bounds.Bottom - $work.Bottom
+        }
+        else {
+            Write-Warning "未找到可访问的底部任务栏，跳过任务栏截图"
+            $w = 0; $h = 0
+        }
     }
     else {
         $r = $tray.Current.BoundingRectangle
@@ -189,56 +246,54 @@ if ($Taskbar) {
         $top = [int]$r.Y
         $w = [int]$r.Width
         $h = [int]$r.Height
-        if ($w -gt 0 -and $h -gt 0) {
-            $shot = New-Object System.Drawing.Bitmap $w, $h
-            $g1 = [System.Drawing.Graphics]::FromImage($shot)
-            $g1.CopyFromScreen($left, $top, 0, 0, (New-Object System.Drawing.Size $w, $h))
-            $g1.Dispose()
+    }
 
-            $zw = $w * $TaskbarZoom
-            $zh = $h * $TaskbarZoom
+    if ($w -gt 0 -and $h -gt 0) {
+        $appRect = $null
+        if ($tray) {
+            $taskbarApp = $tray.FindFirst(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                (New-Object System.Windows.Automation.PropertyCondition(
+                    [System.Windows.Automation.AutomationElement]::NameProperty, $TitleKeyword)))
+            if ($taskbarApp) { $appRect = $taskbarApp.Current.BoundingRectangle }
+        }
+
+        # UIA 可能不公开任务栏按钮名称；兜底定位到居中应用区，但仍不截取整条任务栏。
+        if ($appRect -and $appRect.Width -gt 0) {
+            $center = [int]($appRect.X + $appRect.Width / 2)
+            $halfWidth = [Math]::Max([int]($h * 3.5), [int]($appRect.Width * 3))
+        }
+        else {
+            $center = [int]($left + $w * 0.52)
+            $halfWidth = [int]($h * 3.5)
+            Write-Warning "未能通过 UI Automation 定位 ScreenLens 任务栏按钮，使用任务栏中央附近的安全裁切区。"
+        }
+
+        $cropLeft = [Math]::Max($left, $center - $halfWidth)
+        $cropRight = [Math]::Min($left + $w, $center + $halfWidth)
+        $cropWidth = $cropRight - $cropLeft
+        if ($cropWidth -gt 0) {
+            $crop = New-Object System.Drawing.Bitmap $cropWidth, $h
+            $gc = [System.Drawing.Graphics]::FromImage($crop)
+            $gc.CopyFromScreen($cropLeft, $top, 0, 0, (New-Object System.Drawing.Size $cropWidth, $h))
+            $gc.Dispose()
+
+            $zoomFactor = $TaskbarZoom * 2
+            $zw = $cropWidth * $zoomFactor
+            $zh = $h * $zoomFactor
             $zoom = New-Object System.Drawing.Bitmap $zw, $zh
-            $g2 = [System.Drawing.Graphics]::FromImage($zoom)
-            $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
-            $g2.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
-            $g2.DrawImage($shot, 0, 0, $zw, $zh)
-            $g2.Dispose()
+            $gz = [System.Drawing.Graphics]::FromImage($zoom)
+            $gz.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
+            $gz.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+            $gz.DrawImage($crop, 0, 0, $zw, $zh)
+            $gz.Dispose()
+            $crop.Dispose()
 
             $path = Join-Path $outDir ("taskbar{0}.png" -f $Suffix)
             $zoom.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $zoom.Dispose()
-            Write-Host ("  任务栏截图 {0}  ({1}x{2} 放大 {3} 倍 -> {4}x{5})" -f `
-                (Split-Path $path -Leaf), $w, $h, $TaskbarZoom, $zw, $zh)
-
-            # 再单独放大「运行中应用区」（避开左侧固定图标与右侧系统托盘），
-            # 便于人工核对 ScreenLens 图标与同排应用的视觉尺寸。
-            $fx0 = [int]($w * 0.50)
-            $fx1 = [int]($w * 0.84)
-            $fw = $fx1 - $fx0
-            if ($fw -gt 0) {
-                $crop = New-Object System.Drawing.Bitmap $fw, $h
-                $gc = [System.Drawing.Graphics]::FromImage($crop)
-                $gc.DrawImage($shot, (New-Object System.Drawing.Rectangle 0, 0, $fw, $h),
-                    (New-Object System.Drawing.Rectangle $fx0, 0, $fw, $h),
-                    [System.Drawing.GraphicsUnit]::Pixel)
-                $gc.Dispose()
-
-                $fzw = $fw * $TaskbarZoom * 2
-                $fzh = $h * $TaskbarZoom * 2
-                $focus = New-Object System.Drawing.Bitmap $fzw, $fzh
-                $gf = [System.Drawing.Graphics]::FromImage($focus)
-                $gf.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
-                $gf.DrawImage($crop, 0, 0, $fzw, $fzh)
-                $gf.Dispose()
-                $crop.Dispose()
-
-                $fpath = Join-Path $outDir ("taskbar_apps{0}.png" -f $Suffix)
-                $focus.Save($fpath, [System.Drawing.Imaging.ImageFormat]::Png)
-                $focus.Dispose()
-                Write-Host ("  任务栏应用区截图 {0}  放大 {1} 倍" -f (Split-Path $fpath -Leaf), ($TaskbarZoom * 2))
-            }
-
-            $shot.Dispose()
+            Write-Host ("  安全裁切的任务栏应用区截图 {0}  放大 {1} 倍（未截取整条任务栏）" -f `
+                (Split-Path $path -Leaf), $zoomFactor)
         }
     }
 }

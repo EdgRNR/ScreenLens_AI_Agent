@@ -40,7 +40,12 @@
         <!-- 连接参数：仅 OpenAI 兼容 / DeepSeek 显示 -->
         <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16"
                 Visibility="{x:Bind ProviderFormVis(Vm.Provider), Mode=OneWay}">
-            <Grid RowSpacing="12">
+            <!-- 标签和输入框使用固定的两列关系，避免输入框因 MaxWidth 在整张卡片里居中悬浮。 -->
+            <Grid RowSpacing="12" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MaxWidth="480" />
+                </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -48,25 +53,19 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="连接参数（演示表单，不会保存）" Style="{StaticResource CardTitleText}" />
+                <TextBlock Grid.ColumnSpan="2" Text="连接参数（演示表单，不会保存）" Style="{StaticResource CardTitleText}" />
 
-                <StackPanel Grid.Row="1" Spacing="4">
-                    <TextBlock Text="API 地址" Style="{StaticResource CardDescText}" />
-                    <TextBox PlaceholderText="https://api.example.com/v1" MaxWidth="480"
-                             HorizontalAlignment="Stretch" />
-                </StackPanel>
+                <TextBlock Grid.Row="1" Text="API 地址" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="1" PlaceholderText="https://api.example.com/v1"
+                         HorizontalAlignment="Stretch" />
 
-                <StackPanel Grid.Row="2" Spacing="4">
-                    <TextBlock Text="模型" Style="{StaticResource CardDescText}" />
-                    <TextBox PlaceholderText="gpt-4o-mini" MaxWidth="480"
-                             HorizontalAlignment="Stretch" />
-                </StackPanel>
+                <TextBlock Grid.Row="2" Text="模型" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="2" Grid.Column="1" PlaceholderText="gpt-4o-mini"
+                         HorizontalAlignment="Stretch" />
 
-                <StackPanel Grid.Row="3" Spacing="4">
-                    <TextBlock Text="API 密钥" Style="{StaticResource CardDescText}" />
-                    <PasswordBox PlaceholderText="sk-••••••••••••••••••••" MaxWidth="480"
-                                  HorizontalAlignment="Stretch" PasswordRevealMode="Peek" />
-                </StackPanel>
+                <TextBlock Grid.Row="3" Text="API 密钥" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
+                <PasswordBox Grid.Row="3" Grid.Column="1" PlaceholderText="sk-••••••••••••••••••••"
+                             HorizontalAlignment="Stretch" PasswordRevealMode="Peek" />
             </Grid>
         </Border>
 
@@ -80,8 +79,15 @@
             </StackPanel>
         </Border>
 
-        <TextBlock Text="&#xE946; 原型提示：隐私说明——翻译时仅发送选区内识别到的文本，截图本身不会上传。"
-                   Style="{StaticResource DemoNoteText}" Margin="0,12,0,0" />
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+            <TextBlock Grid.Column="1" Text="原型提示：隐私说明——翻译时仅发送选区内识别到的文本，截图本身不会上传。"
+                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
+        </Grid>
 
     </StackPanel>
 </Page>

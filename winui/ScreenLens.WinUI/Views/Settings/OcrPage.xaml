@@ -14,7 +14,7 @@
         <TextBlock Text="识别结果面板的展示方式（原型演示）" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="结果面板" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE7A5;" Title="面板出现位置" Description="识别完成后结果窗口的显示位置">
+        <controls:SettingCard Icon="&#xE707;" Title="面板出现位置" Description="识别完成后结果窗口的显示位置">
             <ComboBox SelectedIndex="{x:Bind Vm.ResultPosition, Mode=TwoWay}" MinWidth="200">
                 <ComboBoxItem Content="跟随截图位置" />
                 <ComboBoxItem Content="屏幕居中" />
