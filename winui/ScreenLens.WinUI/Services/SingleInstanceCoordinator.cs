@@ -48,9 +48,21 @@ namespace ScreenLens.WinUI.Services
             Action<string[]> activate, out SingleInstanceCoordinator? coordinator)
         {
             var (mutexName, pipeName) = GetIdentity();
-            var mutex = new Mutex(initiallyOwned: true, mutexName,
-                out var createdNew);
-            if (!createdNew)
+            var mutex = new Mutex(initiallyOwned: false, mutexName);
+            var acquired = false;
+            var recoveredAbandonedMutex = false;
+            try
+            {
+                acquired = mutex.WaitOne(0);
+            }
+            catch (AbandonedMutexException)
+            {
+                // 主实例异常退出后，接管已被放弃的互斥体，允许正常恢复。
+                acquired = true;
+                recoveredAbandonedMutex = true;
+            }
+
+            if (!acquired)
             {
                 mutex.Dispose();
                 coordinator = null;
@@ -59,6 +71,8 @@ namespace ScreenLens.WinUI.Services
 
             coordinator = new SingleInstanceCoordinator(mutex, pipeName,
                 dispatcher, activate);
+            if (recoveredAbandonedMutex)
+                App.WriteLifecycleLog("检测到上一个 WinUI 实例异常退出，已接管单实例锁");
             App.WriteLifecycleLog("成为 WinUI 主实例");
             return true;
         }

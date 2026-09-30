@@ -18,7 +18,7 @@ namespace ScreenLens.WinUI.Views.Capture
 {
     /// <summary>
     /// 真实截图选区窗口：
-    /// - 覆盖整个虚拟屏幕（无边框置顶），背景为 GDI 捕获的冻结画面；
+    /// - 覆盖热键触发时鼠标所在显示器（无边框置顶），背景为 GDI 捕获的冻结画面；
     /// - 拖拽绘制矩形选区（Enter / 双击确认，Esc 取消）；
     /// - 确认后裁剪选区为 PNG，经 IPC 交给 Python worker 做 OCR；
     /// - 「松开即识别」由前端偏好 ConfirmOnRelease 控制。
@@ -39,7 +39,6 @@ namespace ScreenLens.WinUI.Views.Capture
         private const double MinSize = 8;
 
         private bool _confirmed;
-
         /// <param name="shot">冻结的虚拟屏截图</param>
         /// <param name="presetRegion">可选：预置选区（虚拟屏物理像素），
         /// 供脚本化调用（--region=x,y,w,h）</param>
@@ -63,16 +62,26 @@ namespace ScreenLens.WinUI.Views.Capture
 
             Root.Loaded += (_, _) =>
             {
-                // 窗口首次显示后再套用覆盖整个虚拟屏幕的边界：
-                // 在 Activate 之前 MoveAndResize 会被系统按默认尺寸覆盖。
-                ApplyFullVirtualScreenBounds();
-                Root.Focus(FocusState.Programmatic);
-                HintText.Text = _freeformSelection
-                    ? "自由圈选屏幕区域 · Enter 确认 · Esc 取消"
-                    : "拖拽选择识别区域 · Enter 确认 · Esc 取消";
-                if (_presetRegion is { } r)
+                try
                 {
-                    ApplyPresetRegion(r);
+                    // 窗口首次显示后再套用单显示器边界；Activate 之前调整会被系统覆盖。
+                    ApplyCaptureMonitorBounds();
+                    Root.Focus(FocusState.Programmatic);
+                    App.WriteLifecycleLog($"截图选区已布局：origin=({_shot.OriginX},{_shot.OriginY}), pixels={_shot.Width}x{_shot.Height}, dips={Root.ActualWidth:F1}x{Root.ActualHeight:F1}, scale={Scale:F2}");
+                    HintText.Text = _freeformSelection
+                        ? "自由圈选屏幕区域 · Enter 确认 · Esc 取消"
+                        : "拖拽选择识别区域 · Enter 确认 · Esc 取消";
+                    if (_presetRegion is { } r)
+                    {
+                        ApplyPresetRegion(r);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.WriteLifecycleLog($"截图选区窗口布局失败：{ex.GetType().Name}: {ex.Message}");
+                    LogCrash("SelectionWindow.Loaded", ex);
+                    ErrorBar.Message = $"截图界面初始化失败：{ex.Message}";
+                    ErrorBar.IsOpen = true;
                 }
             };
         }
@@ -83,8 +92,8 @@ namespace ScreenLens.WinUI.Views.Capture
             // 相对虚拟屏原点 → 相对窗口客户区，再除以缩放得到逻辑坐标
             var scale = Scale <= 0 ? 1.0 : Scale;
             _sel = new Rect(
-                r.X / scale,
-                r.Y / scale,
+                (r.X - _shot.OriginX) / scale,
+                (r.Y - _shot.OriginY) / scale,
                 r.Width / scale,
                 r.Height / scale);
             ApplySelection();
@@ -113,8 +122,8 @@ namespace ScreenLens.WinUI.Views.Capture
             }
         }
 
-        /// <summary>覆盖整个虚拟屏幕（物理像素坐标，多显示器可为负）。</summary>
-        private void ApplyFullVirtualScreenBounds()
+        /// <summary>覆盖已捕获显示器（物理像素坐标，多显示器可为负）。</summary>
+        private void ApplyCaptureMonitorBounds()
         {
             AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(
                 _shot.OriginX, _shot.OriginY, _shot.Width, _shot.Height));
@@ -134,10 +143,14 @@ namespace ScreenLens.WinUI.Views.Capture
                     await stream.WriteAsync(_shot.Bgra, 0, _shot.Bgra.Length);
                 }
                 ShotImage.Source = wb;
+                App.WriteLifecycleLog("截图选区背景位图已加载");
             }
             catch (Exception e)
             {
                 LogCrash("LoadShotImageAsync", e);
+                App.WriteLifecycleLog($"截图选区背景加载失败：{e.GetType().Name}: {e.Message}");
+                ErrorBar.Message = $"截图背景加载失败：{e.Message}";
+                ErrorBar.IsOpen = true;
             }
         }
 

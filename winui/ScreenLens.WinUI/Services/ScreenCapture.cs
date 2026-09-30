@@ -1,7 +1,6 @@
 using System;
 using System.ComponentModel;
 using System.Collections.Generic;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
@@ -12,7 +11,7 @@ using Windows.Storage.Streams;
 namespace ScreenLens.WinUI.Services
 {
     /// <summary>
-    /// 一张完整虚拟屏幕截图（GDI BitBlt 捕获，BGRA8）。
+    /// 一张显示器截图（GDI BitBlt 捕获，BGRA8）。
     /// 选区确认后按需裁剪编码为 PNG；用完即释放，不长期驻留内存。
     /// </summary>
     public sealed class VirtualScreenShot
@@ -20,7 +19,7 @@ namespace ScreenLens.WinUI.Services
         public int Width { get; }
         public int Height { get; }
 
-        /// <summary>虚拟屏幕左上角的屏幕物理坐标（多显示器可能为负）。</summary>
+        /// <summary>截图显示器左上角的屏幕物理坐标（多显示器可能为负）。</summary>
         public int OriginX { get; }
 
         public int OriginY { get; }
@@ -118,15 +117,25 @@ namespace ScreenLens.WinUI.Services
         }
     }
 
-    /// <summary>虚拟屏幕捕获（GDI BitBlt，覆盖所有显示器）。</summary>
+    /// <summary>捕获鼠标所在显示器，避免将多显示器布局空洞放进选择窗口。</summary>
     public static class ScreenCapture
     {
-        private const int SM_XVIRTUALSCREEN = 76;
-        private const int SM_YVIRTUALSCREEN = 77;
-        private const int SM_CXVIRTUALSCREEN = 78;
-        private const int SM_CYVIRTUALSCREEN = 79;
         private const int SRCCOPY = 0x00CC0020;
         private const int CAPTUREBLT = 0x40000000;
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeRect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc,
+            ref NativeRect rect, IntPtr data);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativePoint { public int X; public int Y; }
 
         public static string LastError { get; private set; } = "尚未执行屏幕捕获";
 
@@ -136,8 +145,12 @@ namespace ScreenLens.WinUI.Services
         [DllImport("user32.dll")]
         private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
 
-        [DllImport("user32.dll")]
-        private static extern int GetSystemMetrics(int nIndex);
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetCursorPos(out NativePoint point);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool EnumDisplayMonitors(IntPtr hdc,
+            IntPtr clipRect, MonitorEnumProc callback, IntPtr data);
 
         [DllImport("gdi32.dll", SetLastError = true)]
         private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
@@ -180,22 +193,46 @@ namespace ScreenLens.WinUI.Services
         private static extern int GetDIBits(IntPtr hdc, IntPtr hbm, uint start,
             uint cLines, byte[] lpBits, ref BITMAPINFOHEADER lpbi, uint usage);
 
-        /// <summary>捕获整个虚拟屏幕（所有显示器）。</summary>
+        /// <summary>捕获热键触发时鼠标所在的显示器。</summary>
         public static Task<VirtualScreenShot?> CaptureAsync()
-            => Task.Run(Capture);
+        {
+            if (!GetCursorPos(out var cursor))
+            {
+                LastError = $"读取鼠标位置失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                return Task.FromResult<VirtualScreenShot?>(null);
+            }
+            return Task.Run(() => Capture(cursor));
+        }
 
-        private static VirtualScreenShot? Capture()
+        private static VirtualScreenShot? Capture(NativePoint cursor)
         {
             LastError = "";
-            var vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            var vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-            var vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-            var vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if (vw <= 0 || vh <= 0)
+
+            NativeRect bounds = default;
+            bool AddCursorMonitor(IntPtr monitor, IntPtr hdc,
+                ref NativeRect rect, IntPtr data)
             {
-                LastError = $"虚拟屏幕尺寸无效：{vw}×{vh}，可能当前进程不在交互式桌面会话中。";
+                if (cursor.X >= rect.Left && cursor.X < rect.Right
+                    && cursor.Y >= rect.Top && cursor.Y < rect.Bottom)
+                {
+                    bounds = rect;
+                    return false;
+                }
+                return true;
+            }
+            var monitorCallback = new MonitorEnumProc(AddCursorMonitor);
+            if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
+                    monitorCallback, IntPtr.Zero)
+                || bounds.Right <= bounds.Left || bounds.Bottom <= bounds.Top)
+            {
+                LastError = $"找不到鼠标所在显示器：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
                 return null;
             }
+
+            var vx = bounds.Left;
+            var vy = bounds.Top;
+            var vw = bounds.Right - bounds.Left;
+            var vh = bounds.Bottom - bounds.Top;
 
             var screenDc = GetDC(IntPtr.Zero);
             if (screenDc == IntPtr.Zero)

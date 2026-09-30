@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!-- 真实截图选区：背景为 GDI 捕获的虚拟屏幕，四块暗色遮罩挖出选区 -->
+    <!-- 截图选区覆盖层：只覆盖热键触发时鼠标所在的显示器 -->
     <Grid x:Name="Root" Background="Black"
           KeyDown="OnRootKeyDown"
           PointerPressed="OnPointerPressed"

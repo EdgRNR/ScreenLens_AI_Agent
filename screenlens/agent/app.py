@@ -83,6 +83,7 @@ class HeadlessAgent:
         self._started_at = time.time()
         self._stop = threading.Event()
         self._hotkey_mutex = threading.Lock()
+        self._last_hotkey_launch = 0.0
         self.tray_icon = None
         self._server: PipeServer | None = None
         self._agent_mutex = None
@@ -198,8 +199,14 @@ class HeadlessAgent:
         with self._hotkey_mutex:
             if self._stop.is_set():
                 return
+            now = time.monotonic()
+            if now - self._last_hotkey_launch < 0.8:
+                logger.info("忽略 800ms 内重复触发的截图快捷键")
+                return
+            self._last_hotkey_launch = now
             pid = self.frontends.launch("capture")
             if pid is None:
+                self._last_hotkey_launch = 0.0
                 exe = self.frontends.exe_path
                 if exe is None:
                     message = "截图未启动：找不到 WinUI 前端程序。请先在 Visual Studio 构建并运行一次。"

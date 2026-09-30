@@ -59,11 +59,13 @@ namespace ScreenLens.WinUI
                     Environment.Exit(0);
                 }
 
-                // 主实例仍持有互斥体但 IPC 无响应时，不能丢掉截图热键。
-                // 当前请求以临时实例继续处理；窗口关闭后由 ExitIfNoWindows 退出。
-                WriteLifecycleLog("主实例 IPC 转发超时，改由临时实例处理本次启动请求");
+                // 互斥体已存在就绝不能继续成为第二个 UI 实例。转发失败时
+                // 记录并退出；保留临时实例会让连按热键启动多个独立截图窗口。
+                WriteLifecycleLog("重复启动无法联系主实例，本次请求安全退出，不创建第二个 UI 实例");
                 WriteLog("SingleInstance", new TimeoutException(
-                    "主实例未在超时时间内确认激活请求，已回退为临时实例。"));
+                    "主实例未在超时时间内确认激活请求；为避免重复 UI 实例，本次请求已退出。"));
+                Environment.Exit(2);
+                throw new InvalidOperationException("无法联系 ScreenLens WinUI 主实例。");
             }
         }
 
@@ -193,16 +195,8 @@ namespace ScreenLens.WinUI
                 var restoreSettings = _settingsWindow is not null;
                 _settingsWindow?.AppWindow.Hide();
                 VirtualScreenShot? shot;
-                try
-                {
-                    if (restoreSettings) await Task.Delay(120);
-                    shot = await ScreenCapture.CaptureAsync();
-                }
-                finally
-                {
-                    if (restoreSettings && _settingsWindow is not null)
-                        _settingsWindow.AppWindow.Show();
-                }
+                if (restoreSettings) await Task.Delay(120);
+                shot = await ScreenCapture.CaptureAsync();
                 if (shot is null)
                 {
                     var error = $"屏幕捕获失败：{ScreenCapture.LastError}";
@@ -210,6 +204,7 @@ namespace ScreenLens.WinUI
                     ShowCaptureFailure(error);
                     return;
                 }
+                WriteLifecycleLog($"显示器截图完成：origin=({shot.OriginX},{shot.OriginY}), size={shot.Width}x{shot.Height}");
 
                 // 命令行可选预置选区：--region=x,y,w,h 和 --auto。
                 Windows.Graphics.RectInt32? preset = null;
@@ -242,6 +237,9 @@ namespace ScreenLens.WinUI
             }
             catch (Exception ex)
             {
+                try { _captureWindow?.Close(); }
+                catch { /* 窗口可能尚未完成初始化 */ }
+                _captureWindow = null;
                 WriteLifecycleLog($"截图流程异常：{ex.GetType().Name}: {ex.Message}");
                 WriteLog("CaptureFlow", ex);
                 ShowCaptureFailure($"截图流程启动失败：{ex.Message}");
@@ -308,11 +306,27 @@ namespace ScreenLens.WinUI
             {
                 _openWindows.Remove(window);
                 if (ReferenceEquals(window, _settingsWindow)) _settingsWindow = null;
-                if (ReferenceEquals(window, _captureWindow)) _captureWindow = null;
-                if (ReferenceEquals(window, _resultWindow)) _resultWindow = null;
+                if (ReferenceEquals(window, _captureWindow))
+                {
+                    _captureWindow = null;
+                    RestoreSettingsAfterCapture();
+                }
+                if (ReferenceEquals(window, _resultWindow))
+                {
+                    _resultWindow = null;
+                    RestoreSettingsAfterCapture();
+                }
                 WriteLifecycleLog($"窗口关闭：{window.GetType().Name}，剩余窗口数={_openWindows.Count}");
                 ExitIfNoWindows();
             };
+        }
+
+        private void RestoreSettingsAfterCapture()
+        {
+            // 截图期间保持设置窗口隐藏，避免它在截图画面和选区层之间闪回。
+            // 结果窗仍打开时继续隐藏，直到用户关闭结果再恢复设置页。
+            if (_captureWindow is null && _resultWindow is null && _settingsWindow is not null)
+                _settingsWindow.AppWindow.Show();
         }
 
         private void ExitIfNoWindows()
