@@ -122,6 +122,8 @@ namespace ScreenLens.WinUI.Services
     {
         private const int SRCCOPY = 0x00CC0020;
         private const int CAPTUREBLT = 0x40000000;
+        private const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+        private static readonly IntPtr DpiAwarenessContextPerMonitorV2 = new(-4);
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeRect
         {
@@ -131,11 +133,17 @@ namespace ScreenLens.WinUI.Services
             public int Bottom;
         }
 
-        private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc,
-            ref NativeRect rect, IntPtr data);
-
         [StructLayout(LayoutKind.Sequential)]
         private struct NativePoint { public int X; public int Y; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MonitorInfo
+        {
+            public uint Size;
+            public NativeRect Monitor;
+            public NativeRect Work;
+            public uint Flags;
+        }
 
         public static string LastError { get; private set; } = "尚未执行屏幕捕获";
 
@@ -149,8 +157,16 @@ namespace ScreenLens.WinUI.Services
         private static extern bool GetCursorPos(out NativePoint point);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool EnumDisplayMonitors(IntPtr hdc,
-            IntPtr clipRect, MonitorEnumProc callback, IntPtr data);
+        private static extern IntPtr MonitorFromPoint(NativePoint point,
+            uint flags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern bool GetMonitorInfo(IntPtr monitor,
+            ref MonitorInfo info);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetThreadDpiAwarenessContext(
+            IntPtr dpiContext);
 
         [DllImport("gdi32.dll", SetLastError = true)]
         private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
@@ -195,40 +211,61 @@ namespace ScreenLens.WinUI.Services
 
         /// <summary>捕获热键触发时鼠标所在的显示器。</summary>
         public static Task<VirtualScreenShot?> CaptureAsync()
+            => Task.Run(Capture);
+
+        private static VirtualScreenShot? Capture()
+        {
+            LastError = "";
+            // 显示器边界和 BitBlt 源坐标都使用同一线程的物理像素坐标系。
+            // 不依赖线程池线程继承 UI 线程 DPI context 的实现细节。
+            var previousDpiContext = SetThreadDpiAwarenessContext(
+                DpiAwarenessContextPerMonitorV2);
+            if (previousDpiContext == IntPtr.Zero)
+                App.WriteLifecycleLog(
+                    $"设置截图线程 DPI context 失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}");
+            try
+            {
+                return CapturePerMonitorV2();
+            }
+            finally
+            {
+                if (previousDpiContext != IntPtr.Zero)
+                    SetThreadDpiAwarenessContext(previousDpiContext);
+            }
+        }
+
+        private static VirtualScreenShot? CapturePerMonitorV2()
         {
             if (!GetCursorPos(out var cursor))
             {
                 LastError = $"读取鼠标位置失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
-                return Task.FromResult<VirtualScreenShot?>(null);
-            }
-            return Task.Run(() => Capture(cursor));
-        }
-
-        private static VirtualScreenShot? Capture(NativePoint cursor)
-        {
-            LastError = "";
-
-            NativeRect bounds = default;
-            bool AddCursorMonitor(IntPtr monitor, IntPtr hdc,
-                ref NativeRect rect, IntPtr data)
-            {
-                if (cursor.X >= rect.Left && cursor.X < rect.Right
-                    && cursor.Y >= rect.Top && cursor.Y < rect.Bottom)
-                {
-                    bounds = rect;
-                    return false;
-                }
-                return true;
-            }
-            var monitorCallback = new MonitorEnumProc(AddCursorMonitor);
-            if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
-                    monitorCallback, IntPtr.Zero)
-                || bounds.Right <= bounds.Left || bounds.Bottom <= bounds.Top)
-            {
-                LastError = $"找不到鼠标所在显示器：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
                 return null;
             }
 
+            // 鼠标、显示器边界和后续 GDI 捕获都在本线程的 PerMonitorV2
+            // 上下文内完成，避免 UI 线程与线程池线程的 DPI 坐标系不一致。
+            var monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+            if (monitor == IntPtr.Zero)
+            {
+                LastError = $"定位鼠标所在显示器失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                return null;
+            }
+
+            var info = new MonitorInfo
+            {
+                Size = (uint)Marshal.SizeOf<MonitorInfo>(),
+            };
+            if (!GetMonitorInfo(monitor, ref info)
+                || info.Monitor.Right <= info.Monitor.Left
+                || info.Monitor.Bottom <= info.Monitor.Top)
+            {
+                LastError = $"读取鼠标所在显示器边界失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                return null;
+            }
+
+            var bounds = info.Monitor;
+            App.WriteLifecycleLog(
+                $"解析截图显示器成功：pid={Environment.ProcessId}, cursor=({cursor.X},{cursor.Y}), bounds=({bounds.Left},{bounds.Top},{bounds.Right},{bounds.Bottom})");
             var vx = bounds.Left;
             var vy = bounds.Top;
             var vw = bounds.Right - bounds.Left;
