@@ -30,6 +30,12 @@ namespace ScreenLens.WinUI.Views.Capture
         private readonly VirtualScreenShot _shot;
         private readonly Windows.Graphics.RectInt32? _presetRegion;
         private readonly bool _autoRecognize;
+        private readonly GeometryGroup _dimGeometry = new()
+        {
+            FillRule = FillRule.EvenOdd,
+        };
+        private readonly RectangleGeometry _screenGeometry = new();
+        private readonly RectangleGeometry _selectionGeometry = new();
 
         private bool _dragging;
         private Point _start;
@@ -52,22 +58,26 @@ namespace ScreenLens.WinUI.Views.Capture
             _autoRecognize = autoRecognize;
             _freeformSelection = _vm.DefaultCaptureMode == 1;
             InitializeComponent();
+            _dimGeometry.Children.Add(_screenGeometry);
+            _dimGeometry.Children.Add(_selectionGeometry);
+            DimMask.Data = _dimGeometry;
             Root.RequestedTheme = App.ResolveTheme(_vm.ThemeMode);
             App.RegisterCaptureWindow(this);
 
             Title = "ScreenLens 截图";
 
             SetupPresenter();
-            _ = LoadShotImageAsync();
+            // Place the HWND on its target monitor before it is first shown.
+            // This lets Windows establish the correct per-monitor DPI before
+            // XAML measures the overlay and avoids a visible primary-screen hop.
+            ApplyCaptureMonitorBounds();
 
             Root.Loaded += (_, _) =>
             {
                 try
                 {
-                    // 窗口首次显示后再套用单显示器边界；Activate 之前调整会被系统覆盖。
-                    ApplyCaptureMonitorBounds();
                     Root.Focus(FocusState.Programmatic);
-                    App.WriteLifecycleLog($"截图选区已布局：origin=({_shot.OriginX},{_shot.OriginY}), pixels={_shot.Width}x{_shot.Height}, dips={Root.ActualWidth:F1}x{Root.ActualHeight:F1}, scale={Scale:F2}");
+                    App.WriteLifecycleLog($"截图选区已布局：origin=({_shot.OriginX},{_shot.OriginY}), pixels={_shot.Width}x{_shot.Height}, dips={Root.ActualWidth:F1}x{Root.ActualHeight:F1}, scale={Scale:F2}, hwnd={WindowBounds}");
                     HintText.Text = _freeformSelection
                         ? "自由圈选屏幕区域 · Enter 确认 · Esc 取消"
                         : "拖拽选择识别区域 · Enter 确认 · Esc 取消";
@@ -75,6 +85,9 @@ namespace ScreenLens.WinUI.Views.Capture
                     {
                         ApplyPresetRegion(r);
                     }
+                    // Keep the native window transparent until its first XAML
+                    // layout is complete, then reveal the prepared content.
+                    Root.Opacity = 1;
                 }
                 catch (Exception ex)
                 {
@@ -129,13 +142,22 @@ namespace ScreenLens.WinUI.Views.Capture
                 _shot.OriginX, _shot.OriginY, _shot.Width, _shot.Height));
         }
 
+        private string WindowBounds
+        {
+            get
+            {
+                var p = AppWindow.Position;
+                var s = AppWindow.Size;
+                return $"({p.X},{p.Y},{s.Width},{s.Height})";
+            }
+        }
+
         private async Task LoadShotImageAsync()
         {
             try
             {
-                // 用 WriteableBitmap 同步填充 BGRA（不需要预乘 alpha），
-                // GDI 抓屏数据的 alpha 字节不是 0，预乘转换复杂；
-                // Image 用 Stretch=Fill 显示会自动按窗口逻辑尺寸缩放。
+                // GDI 的 BGRX 缓冲区已在捕获阶段把 X 通道设为不透明；
+                // Image 用 Stretch=Fill 显示会按目标显示器的逻辑尺寸缩放。
                 var wb = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(
                     _shot.Width, _shot.Height);
                 using (var stream = wb.PixelBuffer.AsStream())
@@ -153,6 +175,9 @@ namespace ScreenLens.WinUI.Views.Capture
                 ErrorBar.IsOpen = true;
             }
         }
+
+        /// <summary>在首次显示窗口前完成冻结画面加载，避免先闪出黑色空层。</summary>
+        internal Task PrepareForDisplayAsync() => LoadShotImageAsync();
 
         private static void LogCrash(string source, Exception ex)
         {
@@ -283,8 +308,7 @@ namespace ScreenLens.WinUI.Views.Capture
             var has = _sel.Width >= MinSize && _sel.Height >= MinSize;
             var vis = has ? Visibility.Visible : Visibility.Collapsed;
             SelBorder.Visibility = vis;
-            DimTop.Visibility = DimBottom.Visibility = vis;
-            DimLeft.Visibility = DimRight.Visibility = vis;
+            DimMask.Visibility = vis;
             SizeTag.Visibility = vis;
             if (!has)
             {
@@ -298,20 +322,10 @@ namespace ScreenLens.WinUI.Views.Capture
             SelBorder.HorizontalAlignment = HorizontalAlignment.Left;
             SelBorder.VerticalAlignment = VerticalAlignment.Top;
 
-            DimTop.Width = DimBottom.Width = DimLeft.Width = DimRight.Width =
-                Root.ActualWidth;
-            DimTop.Height = _sel.Y;
-
-            DimBottom.Margin = new Thickness(0, _sel.Y + _sel.Height, 0, 0);
-            DimBottom.Height = Math.Max(0, Root.ActualHeight - _sel.Y - _sel.Height);
-
-            DimLeft.Margin = new Thickness(0, _sel.Y, 0, 0);
-            DimLeft.Width = _sel.X;
-            DimLeft.Height = _sel.Height;
-
-            DimRight.Margin = new Thickness(_sel.X + _sel.Width, _sel.Y, 0, 0);
-            DimRight.Width = Math.Max(0, Root.ActualWidth - _sel.X - _sel.Width);
-            DimRight.Height = _sel.Height;
+            _screenGeometry.Rect = new Rect(0, 0, Root.ActualWidth,
+                Root.ActualHeight);
+            _selectionGeometry.Rect = new Rect(_sel.X, _sel.Y,
+                _sel.Width, _sel.Height);
 
             // 尺寸显示物理像素
             SizeText.Text = string.Format("{0:F0} × {1:F0}",

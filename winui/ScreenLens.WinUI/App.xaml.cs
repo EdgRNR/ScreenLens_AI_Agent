@@ -232,6 +232,7 @@ namespace ScreenLens.WinUI
 
                 _captureWindow = new Views.Capture.SelectionWindow(shot, preset, auto);
                 RegisterWindow(_captureWindow);
+                await _captureWindow.PrepareForDisplayAsync();
                 _captureWindow.Activate();
                 WriteLifecycleLog("截图选区窗口已创建并激活");
             }

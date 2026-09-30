@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <!-- 截图选区覆盖层：只覆盖热键触发时鼠标所在的显示器 -->
-    <Grid x:Name="Root" Background="Black"
+    <Grid x:Name="Root" Background="Black" Opacity="0"
           KeyDown="OnRootKeyDown"
           PointerPressed="OnPointerPressed"
           PointerMoved="OnPointerMoved"
@@ -16,11 +16,11 @@
 
         <Image x:Name="ShotImage" Stretch="Fill" />
 
-        <!-- 挖洞遮罩（按下时选区之外变暗） -->
-        <Rectangle x:Name="DimTop" Fill="#B2000000" Visibility="Collapsed" />
-        <Rectangle x:Name="DimBottom" Fill="#B2000000" Visibility="Collapsed" />
-        <Rectangle x:Name="DimLeft" Fill="#B2000000" Visibility="Collapsed" />
-        <Rectangle x:Name="DimRight" Fill="#B2000000" Visibility="Collapsed" />
+        <!-- 单一偶奇填充遮罩，在选区矩形处挖空，避免多块矩形在高 DPI 下接缝/错位。 -->
+        <Path x:Name="DimMask"
+              Fill="#B2000000"
+              IsHitTestVisible="False"
+              Visibility="Collapsed" />
 
         <!-- 自由圈选轨迹；保持现有截图界面，只在默认模式为自由圈选时显示 -->
         <Polyline x:Name="FreeformLine"

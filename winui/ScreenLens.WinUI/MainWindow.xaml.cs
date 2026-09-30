@@ -180,6 +180,14 @@ namespace ScreenLens.WinUI
             if (pageType == null || pageType == _lastPageType) return;
             _lastPageType = pageType;
             ContentFrame.Navigate(pageType);
+            // All settings pages share one outer ScrollViewer. Reset it after
+            // navigation so a previous page's offset cannot make the new page
+            // appear partially scrolled down.
+            DispatcherQueue.TryEnqueue(() => ContentScroll.ChangeView(
+                horizontalOffset: 0,
+                verticalOffset: 0,
+                zoomFactor: null,
+                disableAnimation: true));
         }
 
         private void SelectPage(Type? pageType)

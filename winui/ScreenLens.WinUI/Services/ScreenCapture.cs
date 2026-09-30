@@ -325,6 +325,13 @@ namespace ScreenLens.WinUI.Services
                     LastError = $"GetDIBits 只读取到 {copied}/{vh} 行：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
                     return null;
                 }
+
+                // BI_RGB 32-bit output is BGRX: the high byte is undefined,
+                // not an alpha channel. WinUI consumes BGRA and may interpret
+                // arbitrary X bytes as transparency, producing black bands.
+                for (var alpha = 3; alpha < pixels.Length; alpha += 4)
+                    pixels[alpha] = byte.MaxValue;
+
                 return new VirtualScreenShot(vw, vh, vx, vy, pixels);
             }
             finally
