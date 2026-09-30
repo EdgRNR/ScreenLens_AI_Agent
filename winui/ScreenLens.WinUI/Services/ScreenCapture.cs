@@ -1,17 +1,19 @@
 using System;
 using System.ComponentModel;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Windows.Graphics.Imaging;
+using Windows.Graphics;
 using Windows.Foundation;
 using Windows.Storage.Streams;
 
 namespace ScreenLens.WinUI.Services
 {
     /// <summary>
-    /// 一张显示器截图（GDI BitBlt 捕获，BGRA8）。
+    /// 一张覆盖所有显示器的虚拟桌面截图（GDI BitBlt 捕获，BGRA8）。
     /// 选区确认后按需裁剪编码为 PNG；用完即释放，不长期驻留内存。
     /// </summary>
     public sealed class VirtualScreenShot
@@ -19,10 +21,13 @@ namespace ScreenLens.WinUI.Services
         public int Width { get; }
         public int Height { get; }
 
-        /// <summary>截图显示器左上角的屏幕物理坐标（多显示器可能为负）。</summary>
+        /// <summary>虚拟桌面左上角的屏幕物理坐标（多显示器可能为负）。</summary>
         public int OriginX { get; }
 
         public int OriginY { get; }
+
+        /// <summary>虚拟桌面内各显示器的物理像素边界。</summary>
+        public IReadOnlyList<RectInt32> MonitorBounds { get; }
 
         private byte[] _bgra;
 
@@ -30,13 +35,15 @@ namespace ScreenLens.WinUI.Services
         public byte[] Bgra => _bgra;
 
         internal VirtualScreenShot(int width, int height,
-            int originX, int originY, byte[] bgra)
+            int originX, int originY, byte[] bgra,
+            IReadOnlyList<RectInt32> monitorBounds)
         {
             Width = width;
             Height = height;
             OriginX = originX;
             OriginY = originY;
             _bgra = bgra;
+            MonitorBounds = monitorBounds;
         }
 
         /// <summary>
@@ -117,12 +124,12 @@ namespace ScreenLens.WinUI.Services
         }
     }
 
-    /// <summary>捕获鼠标所在显示器，避免将多显示器布局空洞放进选择窗口。</summary>
+    /// <summary>捕获所有显示器并按虚拟桌面坐标合成为单张截图。</summary>
     public static class ScreenCapture
     {
         private const int SRCCOPY = 0x00CC0020;
         private const int CAPTUREBLT = 0x40000000;
-        private const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+        private const int BLACKNESS = 0x00000042;
         private static readonly IntPtr DpiAwarenessContextPerMonitorV2 = new(-4);
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeRect
@@ -134,9 +141,6 @@ namespace ScreenLens.WinUI.Services
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct NativePoint { public int X; public int Y; }
-
-        [StructLayout(LayoutKind.Sequential)]
         private struct MonitorInfo
         {
             public uint Size;
@@ -144,6 +148,9 @@ namespace ScreenLens.WinUI.Services
             public NativeRect Work;
             public uint Flags;
         }
+
+        private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc,
+            ref NativeRect bounds, IntPtr data);
 
         public static string LastError { get; private set; } = "尚未执行屏幕捕获";
 
@@ -154,11 +161,8 @@ namespace ScreenLens.WinUI.Services
         private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool GetCursorPos(out NativePoint point);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr MonitorFromPoint(NativePoint point,
-            uint flags);
+        private static extern bool EnumDisplayMonitors(IntPtr hdc,
+            IntPtr clipRect, MonitorEnumProc callback, IntPtr data);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool GetMonitorInfo(IntPtr monitor,
@@ -182,6 +186,10 @@ namespace ScreenLens.WinUI.Services
         private static extern bool BitBlt(IntPtr hdcDest, int nXDest,
             int nYDest, int nWidth, int nHeight, IntPtr hdcSrc, int nXSrc,
             int nYSrc, int dwRop);
+
+        [DllImport("gdi32.dll", SetLastError = true)]
+        private static extern bool PatBlt(IntPtr hdc, int x, int y,
+            int width, int height, int rop);
 
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
@@ -209,7 +217,7 @@ namespace ScreenLens.WinUI.Services
         private static extern int GetDIBits(IntPtr hdc, IntPtr hbm, uint start,
             uint cLines, byte[] lpBits, ref BITMAPINFOHEADER lpbi, uint usage);
 
-        /// <summary>捕获热键触发时鼠标所在的显示器。</summary>
+        /// <summary>捕获所有已连接显示器；热键触发位置不影响可选区域。</summary>
         public static Task<VirtualScreenShot?> CaptureAsync()
             => Task.Run(Capture);
 
@@ -225,7 +233,7 @@ namespace ScreenLens.WinUI.Services
                     $"设置截图线程 DPI context 失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}");
             try
             {
-                return CapturePerMonitorV2();
+                return CaptureVirtualDesktop();
             }
             finally
             {
@@ -234,42 +242,52 @@ namespace ScreenLens.WinUI.Services
             }
         }
 
-        private static VirtualScreenShot? CapturePerMonitorV2()
+        private static VirtualScreenShot? CaptureVirtualDesktop()
         {
-            if (!GetCursorPos(out var cursor))
+            var monitors = new List<NativeRect>();
+            MonitorEnumProc callback = (IntPtr monitor, IntPtr hdc,
+                ref NativeRect bounds, IntPtr data) =>
             {
-                LastError = $"读取鼠标位置失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
-                return null;
-            }
-
-            // 鼠标、显示器边界和后续 GDI 捕获都在本线程的 PerMonitorV2
-            // 上下文内完成，避免 UI 线程与线程池线程的 DPI 坐标系不一致。
-            var monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-            if (monitor == IntPtr.Zero)
-            {
-                LastError = $"定位鼠标所在显示器失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
-                return null;
-            }
-
-            var info = new MonitorInfo
-            {
-                Size = (uint)Marshal.SizeOf<MonitorInfo>(),
+                var info = new MonitorInfo
+                {
+                    Size = (uint)Marshal.SizeOf<MonitorInfo>(),
+                };
+                if (!GetMonitorInfo(monitor, ref info))
+                    return false;
+                if (info.Monitor.Right > info.Monitor.Left
+                    && info.Monitor.Bottom > info.Monitor.Top)
+                    monitors.Add(info.Monitor);
+                return true;
             };
-            if (!GetMonitorInfo(monitor, ref info)
-                || info.Monitor.Right <= info.Monitor.Left
-                || info.Monitor.Bottom <= info.Monitor.Top)
+
+            if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback,
+                    IntPtr.Zero))
             {
-                LastError = $"读取鼠标所在显示器边界失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                LastError = $"枚举显示器失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                return null;
+            }
+            GC.KeepAlive(callback);
+            if (monitors.Count == 0)
+            {
+                LastError = "没有找到可用的显示器";
                 return null;
             }
 
-            var bounds = info.Monitor;
+            var vx = monitors.Min(m => m.Left);
+            var vy = monitors.Min(m => m.Top);
+            var right = monitors.Max(m => m.Right);
+            var bottom = monitors.Max(m => m.Bottom);
+            var vw = right - vx;
+            var vh = bottom - vy;
+            long byteCount = (long)vw * vh * 4;
+            if (vw <= 0 || vh <= 0 || byteCount > int.MaxValue)
+            {
+                LastError = $"虚拟桌面截图尺寸无效或过大：{vw}×{vh}";
+                return null;
+            }
+
             App.WriteLifecycleLog(
-                $"解析截图显示器成功：pid={Environment.ProcessId}, cursor=({cursor.X},{cursor.Y}), bounds=({bounds.Left},{bounds.Top},{bounds.Right},{bounds.Bottom})");
-            var vx = bounds.Left;
-            var vy = bounds.Top;
-            var vw = bounds.Right - bounds.Left;
-            var vh = bounds.Bottom - bounds.Top;
+                $"解析虚拟桌面成功：pid={Environment.ProcessId}, monitors={monitors.Count}, bounds=({vx},{vy},{right},{bottom}), size={vw}x{vh}");
 
             var screenDc = GetDC(IntPtr.Zero);
             if (screenDc == IntPtr.Zero)
@@ -296,11 +314,28 @@ namespace ScreenLens.WinUI.Services
                 var old = SelectObject(memDc, bmp);
                 try
                 {
-                    if (!BitBlt(memDc, 0, 0, vw, vh, screenDc, vx, vy,
-                            SRCCOPY | CAPTUREBLT))
+                    // 显示器之间的虚拟桌面空隙不属于任何屏幕，先明确填黑，
+                    // 避免兼容位图未初始化的内容泄漏到选区覆盖层。
+                    if (!PatBlt(memDc, 0, 0, vw, vh, BLACKNESS))
                     {
-                        LastError = $"BitBlt 捕获屏幕失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                        LastError = $"初始化虚拟桌面截图画布失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
                         return null;
+                    }
+
+                    // 每台显示器单独 BitBlt，避免跨显示适配器的一次性
+                    // BitBlt 失败；目标坐标统一相对虚拟桌面左上角。
+                    foreach (var monitor in monitors)
+                    {
+                        var width = monitor.Right - monitor.Left;
+                        var height = monitor.Bottom - monitor.Top;
+                        if (!BitBlt(memDc, monitor.Left - vx,
+                                monitor.Top - vy, width, height, screenDc,
+                                monitor.Left, monitor.Top,
+                                SRCCOPY | CAPTUREBLT))
+                        {
+                            LastError = $"BitBlt 捕获显示器区域 ({monitor.Left},{monitor.Top},{width}×{height}) 失败：{new Win32Exception(Marshal.GetLastWin32Error()).Message}";
+                            return null;
+                        }
                     }
                 }
                 finally
@@ -332,7 +367,10 @@ namespace ScreenLens.WinUI.Services
                 for (var alpha = 3; alpha < pixels.Length; alpha += 4)
                     pixels[alpha] = byte.MaxValue;
 
-                return new VirtualScreenShot(vw, vh, vx, vy, pixels);
+                var monitorBounds = monitors.Select(m => new RectInt32(
+                    m.Left, m.Top, m.Right - m.Left, m.Bottom - m.Top)).ToArray();
+                return new VirtualScreenShot(vw, vh, vx, vy, pixels,
+                    monitorBounds);
             }
             finally
             {

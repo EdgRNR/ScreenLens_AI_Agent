@@ -18,11 +18,11 @@ namespace ScreenLens.WinUI.Views.Capture
 {
     /// <summary>
     /// 真实截图选区窗口：
-    /// - 覆盖热键触发时鼠标所在显示器（无边框置顶），背景为 GDI 捕获的冻结画面；
+    /// - 覆盖整个虚拟桌面（无边框置顶），背景为所有显示器的冻结画面；
     /// - 拖拽绘制矩形选区（Enter / 双击确认，Esc 取消）；
     /// - 确认后裁剪选区为 PNG，经 IPC 交给 Python worker 做 OCR；
     /// - 「松开即识别」由前端偏好 ConfirmOnRelease 控制。
-    /// 选区物理坐标 = 逻辑坐标 × RasterizationScale + 虚拟屏原点。
+    /// 选区像素按截图位图与窗口客户区的实际宽高比例换算，再加上虚拟桌面原点。
     /// </summary>
     public sealed partial class SelectionWindow : Window
     {
@@ -41,6 +41,7 @@ namespace ScreenLens.WinUI.Views.Capture
         private Point _start;
         private Rect _sel;
         private readonly List<Point> _freeformPoints = new();
+        private readonly List<Border> _hintBars = new();
         private bool _freeformSelection;
         private const double MinSize = 8;
 
@@ -67,9 +68,8 @@ namespace ScreenLens.WinUI.Views.Capture
             Title = "ScreenLens 截图";
 
             SetupPresenter();
-            // Place the HWND on its target monitor before it is first shown.
-            // This lets Windows establish the correct per-monitor DPI before
-            // XAML measures the overlay and avoids a visible primary-screen hop.
+            // Place the HWND over the full virtual desktop before it is first
+            // shown; activation should not briefly expose the primary monitor.
             ApplyCaptureMonitorBounds();
 
             Root.Loaded += (_, _) =>
@@ -77,10 +77,8 @@ namespace ScreenLens.WinUI.Views.Capture
                 try
                 {
                     Root.Focus(FocusState.Programmatic);
-                    App.WriteLifecycleLog($"截图选区已布局：origin=({_shot.OriginX},{_shot.OriginY}), pixels={_shot.Width}x{_shot.Height}, dips={Root.ActualWidth:F1}x{Root.ActualHeight:F1}, scale={Scale:F2}, hwnd={WindowBounds}");
-                    HintText.Text = _freeformSelection
-                        ? "自由圈选屏幕区域 · Enter 确认 · Esc 取消"
-                        : "拖拽选择识别区域 · Enter 确认 · Esc 取消";
+                    App.WriteLifecycleLog($"截图选区已布局：virtualOrigin=({_shot.OriginX},{_shot.OriginY}), pixels={_shot.Width}x{_shot.Height}, dips={Root.ActualWidth:F1}x{Root.ActualHeight:F1}, pixelScale=({PixelScaleX:F3},{PixelScaleY:F3}), hwnd={WindowBounds}");
+                    CreateMonitorHints();
                     if (_presetRegion is { } r)
                     {
                         ApplyPresetRegion(r);
@@ -102,15 +100,14 @@ namespace ScreenLens.WinUI.Views.Capture
         /// <summary>把命令行预置的物理像素矩形换算为逻辑选区。</summary>
         private void ApplyPresetRegion(Windows.Graphics.RectInt32 r)
         {
-            // 相对虚拟屏原点 → 相对窗口客户区，再除以缩放得到逻辑坐标
-            var scale = Scale <= 0 ? 1.0 : Scale;
+            // 屏幕像素 → 虚拟桌面截图局部坐标 → XAML 客户区逻辑坐标。
             _sel = new Rect(
-                (r.X - _shot.OriginX) / scale,
-                (r.Y - _shot.OriginY) / scale,
-                r.Width / scale,
-                r.Height / scale);
+                (r.X - _shot.OriginX) / PixelScaleX,
+                (r.Y - _shot.OriginY) / PixelScaleY,
+                r.Width / PixelScaleX,
+                r.Height / PixelScaleY);
             ApplySelection();
-            HintBar.Visibility = Visibility.Collapsed;
+            SetHintVisibility(Visibility.Collapsed);
             if (_autoRecognize)
             {
                 _ = ConfirmSelectionAsync();
@@ -135,7 +132,7 @@ namespace ScreenLens.WinUI.Views.Capture
             }
         }
 
-        /// <summary>覆盖已捕获显示器（物理像素坐标，多显示器可为负）。</summary>
+        /// <summary>覆盖完整虚拟桌面（物理像素坐标，原点可为负）。</summary>
         private void ApplyCaptureMonitorBounds()
         {
             AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(
@@ -157,7 +154,7 @@ namespace ScreenLens.WinUI.Views.Capture
             try
             {
                 // GDI 的 BGRX 缓冲区已在捕获阶段把 X 通道设为不透明；
-                // Image 用 Stretch=Fill 显示会按目标显示器的逻辑尺寸缩放。
+                // Image 用 Stretch=Fill 显示在整个虚拟桌面客户区。
                 var wb = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(
                     _shot.Width, _shot.Height);
                 using (var stream = wb.PixelBuffer.AsStream())
@@ -192,7 +189,192 @@ namespace ScreenLens.WinUI.Views.Capture
             catch { /* 忽略 */ }
         }
 
-        private double Scale => Root.XamlRoot?.RasterizationScale ?? 1.0;
+        // 用截图像素尺寸 / 当前 XAML 客户区尺寸建立映射，避免不同 DPI
+        // 或无边框窗口客户区取整误差造成副屏选区偏移、裁剪错位。
+        private double PixelScaleX => Root.ActualWidth > 0
+            ? _shot.Width / Root.ActualWidth
+            : Root.XamlRoot?.RasterizationScale ?? 1.0;
+
+        private double PixelScaleY => Root.ActualHeight > 0
+            ? _shot.Height / Root.ActualHeight
+            : Root.XamlRoot?.RasterizationScale ?? 1.0;
+
+        private string HintMessage => _freeformSelection
+            ? "自由圈选屏幕区域 · Enter 确认 · Esc 取消"
+            : "拖拽选择识别区域 · Enter 确认 · Esc 取消";
+
+        private void CreateMonitorHints()
+        {
+            HintCanvas.Children.Clear();
+            _hintBars.Clear();
+
+            foreach (var monitor in _shot.MonitorBounds)
+            {
+                var monitorWidth = monitor.Width / PixelScaleX;
+                var monitorLeft = (monitor.X - _shot.OriginX) / PixelScaleX;
+                var monitorTop = (monitor.Y - _shot.OriginY) / PixelScaleY;
+                var availableWidth = Math.Max(1, monitorWidth - 32);
+                var barWidth = Math.Min(440, availableWidth);
+                var text = new TextBlock
+                {
+                    Text = HintMessage,
+                    FontSize = 13,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        Windows.UI.Color.FromArgb(255, 242, 243, 247)),
+                    TextAlignment = TextAlignment.Center,
+                    TextWrapping = TextWrapping.Wrap,
+                };
+                var bar = new Border
+                {
+                    Width = barWidth,
+                    Padding = new Thickness(16, 7, 16, 7),
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        Windows.UI.Color.FromArgb(204, 31, 31, 38)),
+                    CornerRadius = new CornerRadius(16),
+                    Child = text,
+                    IsHitTestVisible = false,
+                };
+                HintCanvas.Children.Add(bar);
+                bar.Measure(new Size(barWidth, Root.ActualHeight));
+                Canvas.SetLeft(bar, monitorLeft + monitorWidth / 2 - barWidth / 2);
+                Canvas.SetTop(bar, monitorTop + 24);
+                _hintBars.Add(bar);
+            }
+        }
+
+        private void SetHintVisibility(Visibility visibility)
+        {
+            foreach (var bar in _hintBars)
+                bar.Visibility = visibility;
+        }
+
+        private Rect GetSelectionBoundsOnScreen()
+        {
+            var left = _shot.OriginX + _sel.X * PixelScaleX;
+            var top = _shot.OriginY + _sel.Y * PixelScaleY;
+            return new Rect(left, top, _sel.Width * PixelScaleX,
+                _sel.Height * PixelScaleY);
+        }
+
+        /// <summary>选出与当前选区重叠面积最大的显示器。</summary>
+        private Windows.Graphics.RectInt32 GetSelectionMonitor()
+        {
+            var selection = GetSelectionBoundsOnScreen();
+            var best = _shot.MonitorBounds[0];
+            double bestArea = -1;
+            foreach (var monitor in _shot.MonitorBounds)
+            {
+                var width = Math.Max(0, Math.Min(selection.Right,
+                    monitor.X + monitor.Width) - Math.Max(selection.Left,
+                    monitor.X));
+                var height = Math.Max(0, Math.Min(selection.Bottom,
+                    monitor.Y + monitor.Height) - Math.Max(selection.Top,
+                    monitor.Y));
+                var area = width * height;
+                if (area > bestArea)
+                {
+                    bestArea = area;
+                    best = monitor;
+                }
+            }
+            return best;
+        }
+
+        private void PlaceSelectionControls()
+        {
+            var monitor = GetSelectionMonitor();
+            var monitorLeft = (monitor.X - _shot.OriginX) / PixelScaleX;
+            var monitorTop = (monitor.Y - _shot.OriginY) / PixelScaleY;
+            var monitorRight = monitorLeft + monitor.Width / PixelScaleX;
+            var monitorBottom = monitorTop + monitor.Height / PixelScaleY;
+            var selected = GetSelectionBoundsOnScreen();
+            var selectedLeft = Math.Max(monitor.X, selected.Left);
+            var selectedTop = Math.Max(monitor.Y, selected.Top);
+            var selectedRight = Math.Min(monitor.X + monitor.Width,
+                selected.Right);
+            var selectedBottom = Math.Min(monitor.Y + monitor.Height,
+                selected.Bottom);
+            var localLeft = (selectedLeft - _shot.OriginX) / PixelScaleX;
+            var localTop = (selectedTop - _shot.OriginY) / PixelScaleY;
+            var localRight = (selectedRight - _shot.OriginX) / PixelScaleX;
+            var localBottom = (selectedBottom - _shot.OriginY) / PixelScaleY;
+
+            // 尺寸标签贴近选区，但保持完整落在选区所属的显示器内。
+            const double tagWidth = 120;
+            const double tagHeight = 30;
+            var tagX = localRight + 8;
+            if (tagX + tagWidth > monitorRight - 8)
+                tagX = localLeft - tagWidth - 8;
+            tagX = Math.Clamp(tagX, monitorLeft + 8,
+                Math.Max(monitorLeft + 8, monitorRight - tagWidth - 8));
+            var tagY = localTop - tagHeight - 6;
+            if (tagY < monitorTop + 8) tagY = localTop + 6;
+            tagY = Math.Clamp(tagY, monitorTop + 8,
+                Math.Max(monitorTop + 8, monitorBottom - tagHeight - 8));
+            SizeTag.Margin = new Thickness(tagX, tagY, 0, 0);
+
+            Toolbar.Visibility = Visibility.Visible;
+            Toolbar.Width = Math.Min(440, Math.Max(1,
+                monitorRight - monitorLeft - 24));
+            Toolbar.Measure(new Size(Toolbar.Width, Root.ActualHeight));
+            var toolbarWidth = Math.Max(Toolbar.Width,
+                Toolbar.DesiredSize.Width);
+            var toolbarHeight = Math.Max(Toolbar.ActualHeight,
+                Toolbar.DesiredSize.Height);
+            var rightSpace = monitorRight - localRight;
+            var leftSpace = localLeft - monitorLeft;
+            double toolbarX;
+            if (rightSpace >= toolbarWidth + 16)
+                toolbarX = localRight + 16;
+            else if (leftSpace >= toolbarWidth + 16)
+                toolbarX = localLeft - toolbarWidth - 16;
+            else
+                toolbarX = rightSpace >= leftSpace
+                    ? localRight + 12
+                    : localLeft - toolbarWidth - 12;
+
+            toolbarX = Math.Clamp(toolbarX, monitorLeft + 8,
+                Math.Max(monitorLeft + 8, monitorRight - toolbarWidth - 8));
+            var selectionCenterY = (localTop + localBottom) / 2;
+            var toolbarY = Math.Clamp(selectionCenterY - toolbarHeight / 2,
+                monitorTop + 8,
+                Math.Max(monitorTop + 8, monitorBottom - toolbarHeight - 8));
+            Toolbar.Margin = new Thickness(toolbarX, toolbarY, 0, 0);
+        }
+
+        private void PlaceSizeTag()
+        {
+            var monitor = GetSelectionMonitor();
+            var monitorLeft = (monitor.X - _shot.OriginX) / PixelScaleX;
+            var monitorTop = (monitor.Y - _shot.OriginY) / PixelScaleY;
+            var monitorRight = monitorLeft + monitor.Width / PixelScaleX;
+            var monitorBottom = monitorTop + monitor.Height / PixelScaleY;
+            var selected = GetSelectionBoundsOnScreen();
+            var localLeft = (Math.Max(monitor.X, selected.Left)
+                - _shot.OriginX) / PixelScaleX;
+            var localTop = (Math.Max(monitor.Y, selected.Top)
+                - _shot.OriginY) / PixelScaleY;
+            var localRight = (Math.Min(monitor.X + monitor.Width,
+                selected.Right) - _shot.OriginX) / PixelScaleX;
+            var localBottom = (Math.Min(monitor.Y + monitor.Height,
+                selected.Bottom) - _shot.OriginY) / PixelScaleY;
+
+            SizeTag.Measure(new Size(monitorRight - monitorLeft,
+                monitorBottom - monitorTop));
+            var tagWidth = SizeTag.DesiredSize.Width;
+            var tagHeight = SizeTag.DesiredSize.Height;
+            var x = localRight + 8;
+            if (x + tagWidth > monitorRight - 8)
+                x = localLeft - tagWidth - 8;
+            x = Math.Clamp(x, monitorLeft + 8,
+                Math.Max(monitorLeft + 8, monitorRight - tagWidth - 8));
+
+            var y = localTop - tagHeight - 6;
+            if (y < monitorTop + 8) y = localTop + 6;
+            y = Math.Clamp(y, monitorTop + 8,
+                Math.Max(monitorTop + 8, monitorBottom - tagHeight - 8));
+            SizeTag.Margin = new Thickness(x, y, 0, 0);
+        }
 
         // ------------------------------------------------------- 指针交互
 
@@ -329,11 +511,8 @@ namespace ScreenLens.WinUI.Views.Capture
 
             // 尺寸显示物理像素
             SizeText.Text = string.Format("{0:F0} × {1:F0}",
-                _sel.Width * Scale, _sel.Height * Scale);
-            SizeTag.Margin = new Thickness(
-                _sel.X + _sel.Width + 8,
-                Math.Max(4, _sel.Y - 30),
-                0, 0);
+                _sel.Width * PixelScaleX, _sel.Height * PixelScaleY);
+            PlaceSizeTag();
             if (_freeformSelection) UpdateFreeformLine();
         }
 
@@ -359,10 +538,7 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void ShowToolbar()
         {
-            Toolbar.Visibility = Visibility.Visible;
-            Toolbar.Margin = new Thickness(
-                0, 0, 0, Math.Max(16,
-                    Root.ActualHeight - _sel.Y - _sel.Height - 56));
+            PlaceSelectionControls();
         }
 
         private void HideToolbar()
@@ -391,13 +567,15 @@ namespace ScreenLens.WinUI.Views.Capture
             if (_confirmed) return;
             _confirmed = true;
             HideToolbar();
-            HintBar.Visibility = Visibility.Collapsed;
+            SetHintVisibility(Visibility.Collapsed);
 
-            // 逻辑坐标 → 截图像素坐标（截图即虚拟屏物理像素）
-            var px = (int)(_sel.X * Scale);
-            var py = (int)(_sel.Y * Scale);
-            var pw = (int)Math.Ceiling(_sel.Width * Scale);
-            var ph = (int)Math.Ceiling(_sel.Height * Scale);
+            // 客户区逻辑坐标 → 虚拟桌面截图像素坐标。
+            var scaleX = PixelScaleX;
+            var scaleY = PixelScaleY;
+            var px = (int)(_sel.X * scaleX);
+            var py = (int)(_sel.Y * scaleY);
+            var pw = (int)Math.Ceiling(_sel.Width * scaleX);
+            var ph = (int)Math.Ceiling(_sel.Height * scaleY);
 
             BusyOverlay.Visibility = Visibility.Visible;
             BusyText.Text = "正在识别…";
@@ -406,7 +584,7 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 var maskPolygon = _freeformSelection
                     ? _freeformPoints.Select(p => new Point(
-                        p.X * Scale - px, p.Y * Scale - py)).ToArray()
+                        p.X * scaleX - px, p.Y * scaleY - py)).ToArray()
                     : null;
                 var png = await _shot.CropToPngAsync(px, py, pw, ph,
                     maskPolygon);
@@ -467,7 +645,7 @@ namespace ScreenLens.WinUI.Views.Capture
                 ErrorBar.Message = ex.Message;
                 ErrorBar.Severity = InfoBarSeverity.Error;
                 ErrorBar.IsOpen = true;
-                HintBar.Visibility = Visibility.Visible;
+                SetHintVisibility(Visibility.Visible);
             }
             catch (Exception ex)
             {
@@ -476,7 +654,7 @@ namespace ScreenLens.WinUI.Views.Capture
                 ErrorBar.Message = $"识别失败：{ex.Message}";
                 ErrorBar.Severity = InfoBarSeverity.Error;
                 ErrorBar.IsOpen = true;
-                HintBar.Visibility = Visibility.Visible;
+                SetHintVisibility(Visibility.Visible);
             }
         }
 

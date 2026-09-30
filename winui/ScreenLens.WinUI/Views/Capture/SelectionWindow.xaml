@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!-- 截图选区覆盖层：只覆盖热键触发时鼠标所在的显示器 -->
+    <!-- 截图选区覆盖层：覆盖整个虚拟桌面，支持在任意显示器上选区 -->
     <Grid x:Name="Root" Background="Black" Opacity="0"
           KeyDown="OnRootKeyDown"
           PointerPressed="OnPointerPressed"
@@ -28,6 +28,9 @@
                   StrokeThickness="2"
                   IsHitTestVisible="False"
                   Visibility="Collapsed" />
+
+        <!-- 每台显示器各自显示一份提示，避免提示条横跨屏幕接缝。 -->
+        <Canvas x:Name="HintCanvas" IsHitTestVisible="False" />
 
         <!-- 选区边框 -->
         <Border x:Name="SelBorder"
@@ -51,9 +54,8 @@
 
         <!-- 确认工具条 -->
         <CommandBar x:Name="Toolbar"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Bottom"
-                    Margin="0,0,0,48"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
                     Background="#F21F1F26"
                     CornerRadius="8"
                     Visibility="Collapsed">
@@ -64,18 +66,6 @@
             <AppBarButton Label="取消（Esc）" Icon="Cancel"
                           Click="OnCancelClick" />
         </CommandBar>
-
-        <!-- 提示条 -->
-        <Border x:Name="HintBar"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Top"
-                Margin="0,24,0,0"
-                Background="#CC1F1F26"
-                CornerRadius="16"
-                Padding="16,7">
-            <TextBlock x:Name="HintText" Text="拖拽选择识别区域 · Enter 确认 · Esc 取消"
-                       FontSize="13" Foreground="#FFF2F3F7" />
-        </Border>
 
         <!-- 错误提示 -->
         <InfoBar x:Name="ErrorBar"

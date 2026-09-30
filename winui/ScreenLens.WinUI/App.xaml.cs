@@ -204,7 +204,7 @@ namespace ScreenLens.WinUI
                     ShowCaptureFailure(error);
                     return;
                 }
-                WriteLifecycleLog($"显示器截图完成：origin=({shot.OriginX},{shot.OriginY}), size={shot.Width}x{shot.Height}");
+                WriteLifecycleLog($"虚拟桌面截图完成：origin=({shot.OriginX},{shot.OriginY}), size={shot.Width}x{shot.Height}");
 
                 // 命令行可选预置选区：--region=x,y,w,h 和 --auto。
                 Windows.Graphics.RectInt32? preset = null;
