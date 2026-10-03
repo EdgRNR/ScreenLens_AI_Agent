@@ -94,27 +94,30 @@ namespace ScreenLens.WinUI.Services
                     using var attemptTimeout = CancellationTokenSource
                         .CreateLinkedTokenSource(cancellationToken);
                     attemptTimeout.CancelAfter(600);
-                    await client.ConnectAsync(attemptTimeout.Token);
+                    await client.ConnectAsync(attemptTimeout.Token)
+                        .ConfigureAwait(false);
                     using var writer = new StreamWriter(client, new UTF8Encoding(false),
                         1024, leaveOpen: true) { AutoFlush = true };
                     using var reader = new StreamReader(client, Encoding.UTF8,
                         detectEncodingFromByteOrderMarks: false, 1024,
                         leaveOpen: true);
-                    await writer.WriteLineAsync(payload);
-                    var ack = await reader.ReadLineAsync(attemptTimeout.Token);
+                    await writer.WriteLineAsync(payload)
+                        .ConfigureAwait(false);
+                    var ack = await reader.ReadLineAsync(attemptTimeout.Token)
+                        .ConfigureAwait(false);
                     return ack == "ok";
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    await Task.Delay(100, cancellationToken);
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
                 catch (IOException)
                 {
-                    await Task.Delay(100, cancellationToken);
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
                 catch (TimeoutException)
                 {
-                    await Task.Delay(100, cancellationToken);
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
             }
             return false;
