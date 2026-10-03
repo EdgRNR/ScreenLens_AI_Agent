@@ -53,6 +53,7 @@ namespace ScreenLens.WinUI.Views.Capture
         private Point _toolbarDragPointerStart;
         private Point _toolbarDragPositionStart;
         private bool _committingDimensions;
+        private bool _cancelCloseRequested;
         private const double MinSize = 8;
 
         private bool _confirmed;
@@ -63,6 +64,7 @@ namespace ScreenLens.WinUI.Views.Capture
         private const uint SwpNoMove = 0x0002;
         private const uint SwpNoActivate = 0x0010;
         private const uint SwpShowWindow = 0x0040;
+        private const int SwHide = 0;
         private const int GwHwndPrev = 3;
         private const int GwlExStyle = -20;
         private const long WsExTopmost = 0x00000008L;
@@ -71,6 +73,13 @@ namespace ScreenLens.WinUI.Views.Capture
         private static extern bool SetWindowPos(IntPtr hwnd,
             IntPtr hwndInsertAfter, int x, int y, int width, int height,
             uint flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindow(IntPtr hwnd, int command);
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmFlush();
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetForegroundWindow(IntPtr hwnd);
@@ -669,7 +678,7 @@ namespace ScreenLens.WinUI.Views.Capture
             }
             if (e.Key == Windows.System.VirtualKey.Escape)
             {
-                Close();
+                CloseAfterHidingOverlay();
             }
             else if (e.Key == Windows.System.VirtualKey.Enter)
             {
@@ -966,7 +975,28 @@ namespace ScreenLens.WinUI.Views.Capture
             ApplySelection();
         }
 
-        private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
+        private void OnCancelClick(object sender, RoutedEventArgs e)
+            => CloseAfterHidingOverlay();
+
+        private void CloseAfterHidingOverlay()
+        {
+            if (_cancelCloseRequested)
+                return;
+            _cancelCloseRequested = true;
+
+            try
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                ShowWindow(hwnd, SwHide);
+                DwmFlush();
+            }
+            catch
+            {
+                // 即使同步隐藏失败，也继续走窗口清理逻辑。
+            }
+
+            Close();
+        }
 
         private async Task ConfirmSelectionAsync()
         {
