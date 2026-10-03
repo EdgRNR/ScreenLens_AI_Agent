@@ -3,11 +3,13 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Dispatching;
 using ScreenLens.WinUI.Services;
 using ScreenLens.WinUI.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
@@ -39,13 +41,53 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private bool _dragging;
         private Point _start;
+        private Point _lastPointerPosition;
         private Rect _sel;
         private readonly List<Point> _freeformPoints = new();
         private readonly List<Border> _hintBars = new();
+        private Windows.Graphics.RectInt32? _selectionMonitor;
         private bool _freeformSelection;
+        private Windows.Graphics.RectInt32? _toolbarMonitor;
+        private bool _toolbarDragging;
+        private bool _toolbarManuallyPositioned;
+        private Point _toolbarDragPointerStart;
+        private Point _toolbarDragPositionStart;
+        private bool _committingDimensions;
         private const double MinSize = 8;
 
         private bool _confirmed;
+        private DispatcherQueueTimer? _topmostRetryTimer;
+        private int _topmostRetryCount;
+
+        private const uint SwpNoSize = 0x0001;
+        private const uint SwpNoMove = 0x0002;
+        private const uint SwpNoActivate = 0x0010;
+        private const uint SwpShowWindow = 0x0040;
+        private const int GwHwndPrev = 3;
+        private const int GwlExStyle = -20;
+        private const long WsExTopmost = 0x00000008L;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hwnd,
+            IntPtr hwndInsertAfter, int x, int y, int width, int height,
+            uint flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+        private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern int GetWindowText(IntPtr hwnd, System.Text.StringBuilder text,
+            int maxCount);
+
         /// <param name="shot">冻结的虚拟屏截图</param>
         /// <param name="presetRegion">可选：预置选区（虚拟屏物理像素），
         /// 供脚本化调用（--region=x,y,w,h）</param>
@@ -59,6 +101,11 @@ namespace ScreenLens.WinUI.Views.Capture
             _autoRecognize = autoRecognize;
             _freeformSelection = _vm.DefaultCaptureMode == 1;
             InitializeComponent();
+            Closed += (_, _) =>
+            {
+                _topmostRetryTimer?.Stop();
+                _topmostRetryTimer = null;
+            };
             _dimGeometry.Children.Add(_screenGeometry);
             _dimGeometry.Children.Add(_selectionGeometry);
             DimMask.Data = _dimGeometry;
@@ -86,6 +133,7 @@ namespace ScreenLens.WinUI.Views.Capture
                     // Keep the native window transparent until its first XAML
                     // layout is complete, then reveal the prepared content.
                     Root.Opacity = 1;
+                    EnsureCaptureWindowForeground("Loaded");
                 }
                 catch (Exception ex)
                 {
@@ -106,6 +154,11 @@ namespace ScreenLens.WinUI.Views.Capture
                 (r.Y - _shot.OriginY) / PixelScaleY,
                 r.Width / PixelScaleX,
                 r.Height / PixelScaleY);
+            _start = new Point(_sel.X, _sel.Y);
+            _lastPointerPosition = _start;
+            _selectionMonitor = GetMonitorAtRootPoint(new Point(
+                _sel.X + _sel.Width / 2, _sel.Y + _sel.Height / 2));
+            _toolbarMonitor = _selectionMonitor;
             ApplySelection();
             SetHintVisibility(Visibility.Collapsed);
             if (_autoRecognize)
@@ -130,6 +183,79 @@ namespace ScreenLens.WinUI.Views.Capture
                 p.IsMinimizable = false;
                 p.IsAlwaysOnTop = true;
             }
+        }
+
+        internal void EnsureCaptureWindowForeground(string reason)
+        {
+            try
+            {
+                Activate();
+                EnsureCaptureWindowTopmost(reason, requestForeground: true);
+                StartTopmostRetryTimer();
+            }
+            catch (Exception ex)
+            {
+                App.WriteLifecycleLog(
+                    $"截图窗口前置失败({reason})：{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private void EnsureCaptureWindowTopmost(string reason,
+            bool requestForeground)
+        {
+            try
+            {
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                // HWND_TOPMOST is independent of foreground activation. Keep the
+                // screenshot above ordinary apps without repeatedly stealing focus.
+                var positioned = SetWindowPos(hwnd, new IntPtr(-1), 0, 0, 0,
+                    0, SwpNoMove | SwpNoSize | SwpShowWindow | SwpNoActivate);
+                var lastError = positioned ? 0 : Marshal.GetLastWin32Error();
+                var exStyle = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
+                var hasTopmostStyle = (exStyle & WsExTopmost) != 0;
+                var foreground = requestForeground
+                    ? SetForegroundWindow(hwnd)
+                    : false;
+                if (requestForeground)
+                    Root.Focus(FocusState.Programmatic);
+                var isForeground = GetForegroundWindow() == hwnd;
+                var above = GetWindow(hwnd, GwHwndPrev);
+                var aboveTitle = new System.Text.StringBuilder(256);
+                if (above != IntPtr.Zero)
+                    GetWindowText(above, aboveTitle, aboveTitle.Capacity);
+                App.WriteLifecycleLog(
+                    $"截图层级检查({reason})：setTopmost={positioned}, error={lastError}, topmostStyle={hasTopmostStyle}, above='{aboveTitle}', setForeground={foreground}, isForeground={isForeground}");
+            }
+            catch (Exception ex)
+            {
+                App.WriteLifecycleLog(
+                    $"截图层级检查失败({reason})：{ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private void StartTopmostRetryTimer()
+        {
+            _topmostRetryTimer?.Stop();
+            var dispatcher = DispatcherQueue.GetForCurrentThread();
+            if (dispatcher is null)
+                return;
+
+            _topmostRetryCount = 0;
+            _topmostRetryTimer = dispatcher.CreateTimer();
+            _topmostRetryTimer.Interval = TimeSpan.FromMilliseconds(100);
+            _topmostRetryTimer.IsRepeating = true;
+            _topmostRetryTimer.Tick += (_, _) =>
+            {
+                _topmostRetryCount++;
+                EnsureCaptureWindowTopmost(
+                    $"显示后重试{_topmostRetryCount}", requestForeground: false);
+                if (_topmostRetryCount >= 6)
+                {
+                    _topmostRetryTimer?.Stop();
+                    _topmostRetryTimer = null;
+                }
+            };
+            _topmostRetryTimer.Start();
         }
 
         /// <summary>覆盖完整虚拟桌面（物理像素坐标，原点可为负）。</summary>
@@ -248,132 +374,132 @@ namespace ScreenLens.WinUI.Views.Capture
                 bar.Visibility = visibility;
         }
 
-        private Rect GetSelectionBoundsOnScreen()
+        private Windows.Graphics.RectInt32 GetMonitorAtRootPoint(Point point)
         {
-            var left = _shot.OriginX + _sel.X * PixelScaleX;
-            var top = _shot.OriginY + _sel.Y * PixelScaleY;
-            return new Rect(left, top, _sel.Width * PixelScaleX,
-                _sel.Height * PixelScaleY);
-        }
-
-        /// <summary>选出与当前选区重叠面积最大的显示器。</summary>
-        private Windows.Graphics.RectInt32 GetSelectionMonitor()
-        {
-            var selection = GetSelectionBoundsOnScreen();
-            var best = _shot.MonitorBounds[0];
-            double bestArea = -1;
+            var screenX = _shot.OriginX + point.X * PixelScaleX;
+            var screenY = _shot.OriginY + point.Y * PixelScaleY;
             foreach (var monitor in _shot.MonitorBounds)
             {
-                var width = Math.Max(0, Math.Min(selection.Right,
-                    monitor.X + monitor.Width) - Math.Max(selection.Left,
-                    monitor.X));
-                var height = Math.Max(0, Math.Min(selection.Bottom,
-                    monitor.Y + monitor.Height) - Math.Max(selection.Top,
-                    monitor.Y));
-                var area = width * height;
-                if (area > bestArea)
-                {
-                    bestArea = area;
-                    best = monitor;
-                }
+                if (screenX >= monitor.X
+                    && screenX < monitor.X + monitor.Width
+                    && screenY >= monitor.Y
+                    && screenY < monitor.Y + monitor.Height)
+                    return monitor;
             }
-            return best;
+
+            // 防止显示器布局存在缝隙时没有命中，取中心点最近的显示器。
+            return _shot.MonitorBounds
+                .OrderBy(m => Math.Pow(screenX - (m.X + m.Width / 2.0), 2)
+                    + Math.Pow(screenY - (m.Y + m.Height / 2.0), 2))
+                .First();
         }
 
         private void PlaceSelectionControls()
         {
-            var monitor = GetSelectionMonitor();
+            if (Root.ActualWidth <= 0 || Root.ActualHeight <= 0)
+                return;
+
+            var monitor = _toolbarMonitor ?? _selectionMonitor
+                ?? GetMonitorAtRootPoint(_lastPointerPosition);
+            _toolbarMonitor = monitor;
             var monitorLeft = (monitor.X - _shot.OriginX) / PixelScaleX;
             var monitorTop = (monitor.Y - _shot.OriginY) / PixelScaleY;
-            var monitorRight = monitorLeft + monitor.Width / PixelScaleX;
-            var monitorBottom = monitorTop + monitor.Height / PixelScaleY;
-            var selected = GetSelectionBoundsOnScreen();
-            var selectedLeft = Math.Max(monitor.X, selected.Left);
-            var selectedTop = Math.Max(monitor.Y, selected.Top);
-            var selectedRight = Math.Min(monitor.X + monitor.Width,
-                selected.Right);
-            var selectedBottom = Math.Min(monitor.Y + monitor.Height,
-                selected.Bottom);
-            var localLeft = (selectedLeft - _shot.OriginX) / PixelScaleX;
-            var localTop = (selectedTop - _shot.OriginY) / PixelScaleY;
-            var localRight = (selectedRight - _shot.OriginX) / PixelScaleX;
-            var localBottom = (selectedBottom - _shot.OriginY) / PixelScaleY;
-
-            // 尺寸标签贴近选区，但保持完整落在选区所属的显示器内。
-            const double tagWidth = 120;
-            const double tagHeight = 30;
-            var tagX = localRight + 8;
-            if (tagX + tagWidth > monitorRight - 8)
-                tagX = localLeft - tagWidth - 8;
-            tagX = Math.Clamp(tagX, monitorLeft + 8,
-                Math.Max(monitorLeft + 8, monitorRight - tagWidth - 8));
-            var tagY = localTop - tagHeight - 6;
-            if (tagY < monitorTop + 8) tagY = localTop + 6;
-            tagY = Math.Clamp(tagY, monitorTop + 8,
-                Math.Max(monitorTop + 8, monitorBottom - tagHeight - 8));
-            SizeTag.Margin = new Thickness(tagX, tagY, 0, 0);
+            var monitorRight = Math.Min(Root.ActualWidth,
+                monitorLeft + monitor.Width / PixelScaleX);
+            var monitorBottom = Math.Min(Root.ActualHeight,
+                monitorTop + monitor.Height / PixelScaleY);
+            monitorLeft = Math.Max(0, monitorLeft);
+            monitorTop = Math.Max(0, monitorTop);
+            const double inset = 8;
+            const double gap = 10;
 
             Toolbar.Visibility = Visibility.Visible;
-            Toolbar.Width = Math.Min(440, Math.Max(1,
-                monitorRight - monitorLeft - 24));
-            Toolbar.Measure(new Size(Toolbar.Width, Root.ActualHeight));
-            var toolbarWidth = Math.Max(Toolbar.Width,
+            var maxToolbarWidth = Math.Max(1,
+                monitorRight - monitorLeft - inset * 2);
+            Toolbar.Width = double.NaN;
+            Toolbar.MaxWidth = maxToolbarWidth;
+            Toolbar.Measure(new Size(maxToolbarWidth,
+                Math.Max(1, monitorBottom - monitorTop)));
+            var toolbarWidth = Math.Min(maxToolbarWidth,
                 Toolbar.DesiredSize.Width);
-            var toolbarHeight = Math.Max(Toolbar.ActualHeight,
-                Toolbar.DesiredSize.Height);
-            var rightSpace = monitorRight - localRight;
-            var leftSpace = localLeft - monitorLeft;
-            double toolbarX;
-            if (rightSpace >= toolbarWidth + 16)
-                toolbarX = localRight + 16;
-            else if (leftSpace >= toolbarWidth + 16)
-                toolbarX = localLeft - toolbarWidth - 16;
-            else
-                toolbarX = rightSpace >= leftSpace
-                    ? localRight + 12
-                    : localLeft - toolbarWidth - 12;
+            var toolbarHeight = Toolbar.DesiredSize.Height;
 
-            toolbarX = Math.Clamp(toolbarX, monitorLeft + 8,
-                Math.Max(monitorLeft + 8, monitorRight - toolbarWidth - 8));
-            var selectionCenterY = (localTop + localBottom) / 2;
-            var toolbarY = Math.Clamp(selectionCenterY - toolbarHeight / 2,
-                monitorTop + 8,
-                Math.Max(monitorTop + 8, monitorBottom - toolbarHeight - 8));
-            Toolbar.Margin = new Thickness(toolbarX, toolbarY, 0, 0);
+            if (_toolbarManuallyPositioned)
+            {
+                SetToolbarPosition(Toolbar.Margin.Left, Toolbar.Margin.Top,
+                    monitorLeft, monitorTop, monitorRight, monitorBottom,
+                    toolbarWidth, toolbarHeight, inset);
+                return;
+            }
+
+            // Anchor to the actual release point (a rectangle corner or the
+            // freeform path endpoint), not the selection's distant bounding
+            // box center. This keeps the controls beside where drawing ended.
+            var selectedLeft = Math.Max(_sel.Left, monitorLeft);
+            var selectedTop = Math.Max(_sel.Top, monitorTop);
+            var selectedRight = Math.Min(_sel.Right, monitorRight);
+            var selectedBottom = Math.Min(_sel.Bottom, monitorBottom);
+            if (selectedRight <= selectedLeft || selectedBottom <= selectedTop)
+            {
+                selectedLeft = Math.Clamp(_lastPointerPosition.X, monitorLeft, monitorRight);
+                selectedRight = selectedLeft;
+                selectedTop = Math.Clamp(_lastPointerPosition.Y, monitorTop, monitorBottom);
+                selectedBottom = selectedTop;
+            }
+
+            var anchorX = Math.Clamp(_lastPointerPosition.X,
+                monitorLeft, monitorRight);
+            var anchorY = Math.Clamp(_lastPointerPosition.Y,
+                monitorTop, monitorBottom);
+            var candidates = new[]
+            {
+                (X: anchorX + gap, Y: anchorY - toolbarHeight / 2),
+                (X: anchorX - toolbarWidth - gap, Y: anchorY - toolbarHeight / 2),
+                (X: anchorX - toolbarWidth / 2, Y: anchorY + gap),
+                (X: anchorX - toolbarWidth / 2, Y: anchorY - toolbarHeight - gap),
+            };
+            var safeLeft = Math.Min(monitorRight - inset, monitorLeft + inset);
+            var safeTop = Math.Min(monitorBottom - inset, monitorTop + inset);
+            var safeRight = Math.Max(safeLeft, monitorRight - inset);
+            var safeBottom = Math.Max(safeTop, monitorBottom - inset);
+            var bestX = safeLeft;
+            var bestY = safeTop;
+            var bestScore = double.PositiveInfinity;
+            foreach (var candidate in candidates)
+            {
+                var x = Math.Clamp(candidate.X, safeLeft,
+                    Math.Max(safeLeft, safeRight - toolbarWidth));
+                var y = Math.Clamp(candidate.Y, safeTop,
+                    Math.Max(safeTop, safeBottom - toolbarHeight));
+                var dx = Math.Max(0, Math.Max(x - anchorX, anchorX - (x + toolbarWidth)));
+                var dy = Math.Max(0, Math.Max(y - anchorY, anchorY - (y + toolbarHeight)));
+                var overlapX = Math.Max(0, Math.Min(selectedRight, x + toolbarWidth) - Math.Max(selectedLeft, x));
+                var overlapY = Math.Max(0, Math.Min(selectedBottom, y + toolbarHeight) - Math.Max(selectedTop, y));
+                var score = Math.Sqrt(dx * dx + dy * dy)
+                    + (overlapX * overlapY > 0 ? 10000 + overlapX * overlapY : 0);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestX = x;
+                    bestY = y;
+                }
+            }
+
+            SetToolbarPosition(bestX, bestY, monitorLeft, monitorTop,
+                monitorRight, monitorBottom, toolbarWidth, toolbarHeight, inset);
         }
 
-        private void PlaceSizeTag()
+        private void SetToolbarPosition(double x, double y,
+            double monitorLeft, double monitorTop, double monitorRight,
+            double monitorBottom, double toolbarWidth, double toolbarHeight,
+            double inset = 8)
         {
-            var monitor = GetSelectionMonitor();
-            var monitorLeft = (monitor.X - _shot.OriginX) / PixelScaleX;
-            var monitorTop = (monitor.Y - _shot.OriginY) / PixelScaleY;
-            var monitorRight = monitorLeft + monitor.Width / PixelScaleX;
-            var monitorBottom = monitorTop + monitor.Height / PixelScaleY;
-            var selected = GetSelectionBoundsOnScreen();
-            var localLeft = (Math.Max(monitor.X, selected.Left)
-                - _shot.OriginX) / PixelScaleX;
-            var localTop = (Math.Max(monitor.Y, selected.Top)
-                - _shot.OriginY) / PixelScaleY;
-            var localRight = (Math.Min(monitor.X + monitor.Width,
-                selected.Right) - _shot.OriginX) / PixelScaleX;
-            var localBottom = (Math.Min(monitor.Y + monitor.Height,
-                selected.Bottom) - _shot.OriginY) / PixelScaleY;
-
-            SizeTag.Measure(new Size(monitorRight - monitorLeft,
-                monitorBottom - monitorTop));
-            var tagWidth = SizeTag.DesiredSize.Width;
-            var tagHeight = SizeTag.DesiredSize.Height;
-            var x = localRight + 8;
-            if (x + tagWidth > monitorRight - 8)
-                x = localLeft - tagWidth - 8;
-            x = Math.Clamp(x, monitorLeft + 8,
-                Math.Max(monitorLeft + 8, monitorRight - tagWidth - 8));
-
-            var y = localTop - tagHeight - 6;
-            if (y < monitorTop + 8) y = localTop + 6;
-            y = Math.Clamp(y, monitorTop + 8,
-                Math.Max(monitorTop + 8, monitorBottom - tagHeight - 8));
-            SizeTag.Margin = new Thickness(x, y, 0, 0);
+            var minX = Math.Min(monitorRight - inset, monitorLeft + inset);
+            var minY = Math.Min(monitorBottom - inset, monitorTop + inset);
+            var maxX = Math.Max(minX, monitorRight - inset - toolbarWidth);
+            var maxY = Math.Max(minY, monitorBottom - inset - toolbarHeight);
+            Toolbar.Margin = new Thickness(Math.Clamp(x, minX, maxX),
+                Math.Clamp(y, minY, maxY), 0, 0);
         }
 
         // ------------------------------------------------------- 指针交互
@@ -381,11 +507,16 @@ namespace ScreenLens.WinUI.Views.Capture
         private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
         {
             if (BusyOverlay.Visibility == Visibility.Visible) return;
+            if (IsWithinToolbar(e.OriginalSource as DependencyObject)) return;
             var p = e.GetCurrentPoint(Root);
             if (!p.Properties.IsLeftButtonPressed) return;
 
             _dragging = true;
+            _toolbarManuallyPositioned = false;
             _start = p.Position;
+            _lastPointerPosition = _start;
+            _selectionMonitor = GetMonitorAtRootPoint(_start);
+            _toolbarMonitor = _selectionMonitor;
             HideToolbar();
             Root.CapturePointer(e.Pointer);
             _freeformPoints.Clear();
@@ -402,6 +533,7 @@ namespace ScreenLens.WinUI.Views.Capture
         {
             if (!_dragging) return;
             var p = e.GetCurrentPoint(Root);
+            _lastPointerPosition = p.Position;
             if (_freeformSelection)
             {
                 var last = _freeformPoints[^1];
@@ -426,25 +558,40 @@ namespace ScreenLens.WinUI.Views.Capture
         private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
         {
             if (!_dragging) return;
+            var end = e.GetCurrentPoint(Root).Position;
+            _lastPointerPosition = end;
             _dragging = false;
             try { Root.ReleasePointerCapture(e.Pointer); }
             catch { /* 忽略 */ }
 
             if (_freeformSelection && _freeformPoints.Count > 0)
             {
-                var end = e.GetCurrentPoint(Root).Position;
                 if (_freeformPoints[^1] != end) _freeformPoints.Add(end);
                 if (_freeformPoints.Count >= 3
                     && _freeformPoints[^1] != _freeformPoints[0])
                     _freeformPoints.Add(_freeformPoints[0]);
                 UpdateFreeformBounds();
             }
+            else if (!_freeformSelection)
+            {
+                _sel = new Rect(
+                    Math.Min(_start.X, end.X),
+                    Math.Min(_start.Y, end.Y),
+                    Math.Abs(end.X - _start.X),
+                    Math.Abs(end.Y - _start.Y));
+                ApplySelection();
+            }
+
+            // Keep the whole toolbar on the display where drawing ended.
+            _toolbarMonitor = GetMonitorAtRootPoint(end);
 
             if (_sel.Width < MinSize || _sel.Height < MinSize
                 || (_freeformSelection && _freeformPoints.Count < 4))
             {
                 // 视为误触：清除选区
                 _sel = new Rect(0, 0, 0, 0);
+                _selectionMonitor = null;
+                _toolbarMonitor = null;
                 _freeformPoints.Clear();
                 FreeformLine.Visibility = Visibility.Collapsed;
                 ApplySelection();
@@ -478,6 +625,7 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 if (_sel.Width >= MinSize && _sel.Height >= MinSize)
                 {
+                    CommitDimensionEdits();
                     _ = ConfirmSelectionAsync();
                 }
             }
@@ -491,7 +639,6 @@ namespace ScreenLens.WinUI.Views.Capture
             var vis = has ? Visibility.Visible : Visibility.Collapsed;
             SelBorder.Visibility = vis;
             DimMask.Visibility = vis;
-            SizeTag.Visibility = vis;
             if (!has)
             {
                 return;
@@ -509,10 +656,6 @@ namespace ScreenLens.WinUI.Views.Capture
             _selectionGeometry.Rect = new Rect(_sel.X, _sel.Y,
                 _sel.Width, _sel.Height);
 
-            // 尺寸显示物理像素
-            SizeText.Text = string.Format("{0:F0} × {1:F0}",
-                _sel.Width * PixelScaleX, _sel.Height * PixelScaleY);
-            PlaceSizeTag();
             if (_freeformSelection) UpdateFreeformLine();
         }
 
@@ -536,8 +679,215 @@ namespace ScreenLens.WinUI.Views.Capture
                 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        private void SyncDimensionInputs()
+        {
+            if (_sel.Width < MinSize || _sel.Height < MinSize)
+                return;
+            SelectionWidthBox.Text = Math.Max(1,
+                (int)Math.Round(_sel.Width * PixelScaleX)).ToString();
+            SelectionHeightBox.Text = Math.Max(1,
+                (int)Math.Round(_sel.Height * PixelScaleY)).ToString();
+            CenterDimensionText(SelectionWidthBox);
+            CenterDimensionText(SelectionHeightBox);
+        }
+
+        private void OnDimensionTextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (sender is TextBox textBox)
+                CenterDimensionText(textBox);
+        }
+
+        private static void CenterDimensionText(TextBox textBox)
+        {
+            var controlWidth = textBox.ActualWidth > 0
+                ? textBox.ActualWidth
+                : textBox.Width;
+            var controlHeight = textBox.ActualHeight > 0
+                ? textBox.ActualHeight
+                : textBox.Height;
+            if (controlWidth <= 0 || double.IsNaN(controlWidth)
+                || controlHeight <= 0 || double.IsNaN(controlHeight))
+                return;
+
+            var measuredText = new TextBlock
+            {
+                Text = textBox.Text ?? string.Empty,
+                FontFamily = textBox.FontFamily,
+                FontSize = textBox.FontSize,
+                FontWeight = textBox.FontWeight,
+                FontStyle = textBox.FontStyle,
+                FontStretch = textBox.FontStretch,
+                TextWrapping = TextWrapping.NoWrap,
+            };
+            measuredText.Measure(new Size(double.PositiveInfinity,
+                double.PositiveInfinity));
+
+            var textAreaWidth = Math.Max(0, controlWidth
+                - textBox.BorderThickness.Left - textBox.BorderThickness.Right);
+            var leftPadding = Math.Max(0,
+                (textAreaWidth - measuredText.DesiredSize.Width) / 2);
+            var textAreaHeight = Math.Max(0, controlHeight
+                - textBox.BorderThickness.Top - textBox.BorderThickness.Bottom);
+            var topPadding = Math.Max(0,
+                (textAreaHeight - measuredText.DesiredSize.Height) / 2);
+            // The edit view stays left/top aligned. Inset the measured text by
+            // half of the spare width and height to center it on both axes.
+            textBox.Padding = new Thickness(leftPadding, topPadding, 0, 0);
+        }
+
+        private void OnDimensionLostFocus(object sender, RoutedEventArgs e)
+            => CommitDimensionEdits();
+
+        private void OnDimensionKeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key != Windows.System.VirtualKey.Enter)
+                return;
+            e.Handled = true;
+            CommitDimensionEdits();
+        }
+
+        private void CommitDimensionEdits()
+        {
+            if (_committingDimensions || Toolbar.Visibility != Visibility.Visible
+                || _sel.Width < MinSize || _sel.Height < MinSize)
+                return;
+
+            _committingDimensions = true;
+            try
+            {
+                if (!int.TryParse(SelectionWidthBox.Text?.Trim(), out var widthPx)
+                    || !int.TryParse(SelectionHeightBox.Text?.Trim(), out var heightPx))
+                {
+                    SyncDimensionInputs();
+                    return;
+                }
+
+                var scaleX = PixelScaleX;
+                var scaleY = PixelScaleY;
+                var availableWidth = Math.Max(1,
+                    (int)Math.Floor((Root.ActualWidth - _sel.X) * scaleX));
+                var availableHeight = Math.Max(1,
+                    (int)Math.Floor((Root.ActualHeight - _sel.Y) * scaleY));
+                var minimumWidth = Math.Min(availableWidth,
+                    Math.Max(1, (int)Math.Ceiling(MinSize * scaleX)));
+                var minimumHeight = Math.Min(availableHeight,
+                    Math.Max(1, (int)Math.Ceiling(MinSize * scaleY)));
+                widthPx = Math.Clamp(widthPx, minimumWidth, availableWidth);
+                heightPx = Math.Clamp(heightPx, minimumHeight, availableHeight);
+
+                var old = _sel;
+                var newWidth = widthPx / scaleX;
+                var newHeight = heightPx / scaleY;
+                if (_freeformSelection && old.Width > 0 && old.Height > 0)
+                {
+                    var xScale = newWidth / old.Width;
+                    var yScale = newHeight / old.Height;
+                    for (var i = 0; i < _freeformPoints.Count; i++)
+                    {
+                        var point = _freeformPoints[i];
+                        _freeformPoints[i] = new Point(
+                            old.X + (point.X - old.X) * xScale,
+                            old.Y + (point.Y - old.Y) * yScale);
+                    }
+                    UpdateFreeformBounds();
+                }
+                else
+                {
+                    _sel = new Rect(old.X, old.Y, newWidth, newHeight);
+                    ApplySelection();
+                }
+
+                SyncDimensionInputs();
+                if (Toolbar.Visibility == Visibility.Visible)
+                {
+                    // Do not move a toolbar under the pointer while a button
+                    // press is transitioning from TextBox focus to its Click.
+                    DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
+                    {
+                        if (Toolbar.Visibility == Visibility.Visible)
+                            PlaceSelectionControls();
+                    });
+                }
+            }
+            finally
+            {
+                _committingDimensions = false;
+            }
+        }
+
+        private bool IsWithinToolbar(DependencyObject? source)
+        {
+            while (source is not null)
+            {
+                if (ReferenceEquals(source, Toolbar))
+                    return true;
+                source = VisualTreeHelper.GetParent(source);
+            }
+            return false;
+        }
+
+        private void OnToolbarDragPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (Toolbar.Visibility != Visibility.Visible
+                || sender is not UIElement handle)
+                return;
+            _toolbarDragging = true;
+            _toolbarDragPointerStart = e.GetCurrentPoint(Root).Position;
+            _toolbarDragPositionStart = new Point(
+                Toolbar.Margin.Left, Toolbar.Margin.Top);
+            handle.CapturePointer(e.Pointer);
+            e.Handled = true;
+        }
+
+        private void OnToolbarDragMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_toolbarDragging)
+                return;
+            var monitor = _toolbarMonitor ?? GetMonitorAtRootPoint(
+                _lastPointerPosition);
+            var monitorLeft = Math.Max(0,
+                (monitor.X - _shot.OriginX) / PixelScaleX);
+            var monitorTop = Math.Max(0,
+                (monitor.Y - _shot.OriginY) / PixelScaleY);
+            var monitorRight = Math.Min(Root.ActualWidth,
+                (monitor.X - _shot.OriginX + monitor.Width) / PixelScaleX);
+            var monitorBottom = Math.Min(Root.ActualHeight,
+                (monitor.Y - _shot.OriginY + monitor.Height) / PixelScaleY);
+            var width = Toolbar.ActualWidth > 0
+                ? Toolbar.ActualWidth : Toolbar.DesiredSize.Width;
+            var height = Toolbar.ActualHeight > 0
+                ? Toolbar.ActualHeight : Toolbar.DesiredSize.Height;
+            var pointer = e.GetCurrentPoint(Root).Position;
+            SetToolbarPosition(
+                _toolbarDragPositionStart.X + pointer.X - _toolbarDragPointerStart.X,
+                _toolbarDragPositionStart.Y + pointer.Y - _toolbarDragPointerStart.Y,
+                monitorLeft, monitorTop, monitorRight, monitorBottom,
+                width, height);
+            _toolbarManuallyPositioned = true;
+            e.Handled = true;
+        }
+
+        private void OnToolbarDragReleased(object sender, PointerRoutedEventArgs e)
+        {
+            _toolbarDragging = false;
+            if (sender is UIElement handle)
+            {
+                try { handle.ReleasePointerCapture(e.Pointer); }
+                catch { /* Pointer may already have been released by the system. */ }
+            }
+            e.Handled = true;
+        }
+
+        private void OnToolbarDragCanceled(object sender, PointerRoutedEventArgs e)
+        {
+            _toolbarDragging = false;
+            e.Handled = true;
+        }
+
         private void ShowToolbar()
         {
+            _toolbarManuallyPositioned = false;
+            SyncDimensionInputs();
             PlaceSelectionControls();
         }
 
@@ -549,12 +899,18 @@ namespace ScreenLens.WinUI.Views.Capture
         // -------------------------------------------------------- 确认/取消
 
         private void OnConfirmClick(object sender, RoutedEventArgs e)
-            => _ = ConfirmSelectionAsync();
+        {
+            CommitDimensionEdits();
+            _ = ConfirmSelectionAsync();
+        }
 
         private void OnReselectClick(object sender, RoutedEventArgs e)
         {
             HideToolbar();
             _sel = new Rect(0, 0, 0, 0);
+            _selectionMonitor = null;
+            _toolbarMonitor = null;
+            _toolbarManuallyPositioned = false;
             _freeformPoints.Clear();
             FreeformLine.Visibility = Visibility.Collapsed;
             ApplySelection();

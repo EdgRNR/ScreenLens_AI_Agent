@@ -149,7 +149,11 @@ namespace ScreenLens.WinUI
                     || _resultWindow is not null)
                 {
                     WriteLifecycleLog("截图流程已在运行，激活现有窗口");
-                    (_captureWindow as Window ?? _resultWindow)?.Activate();
+                    if (_captureWindow is not null)
+                        _captureWindow.EnsureCaptureWindowForeground(
+                            "重复截图热键");
+                    else
+                        _resultWindow?.Activate();
                     return;
                 }
                 _ = StartCaptureFlowAsync(args);

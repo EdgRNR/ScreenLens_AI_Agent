@@ -39,33 +39,92 @@
                 Background="Transparent"
                 Visibility="Collapsed" />
 
-        <!-- 尺寸标签 -->
-        <Border x:Name="SizeTag"
-                Background="#CC1F1F26"
-                CornerRadius="4"
-                Padding="8,3"
-                Visibility="Collapsed"
+        <!-- 选区完成后显示的尺寸编辑与操作工具条 -->
+        <Border x:Name="Toolbar"
+                HorizontalAlignment="Left"
                 VerticalAlignment="Top"
-                HorizontalAlignment="Left">
-            <TextBlock x:Name="SizeText" FontSize="12"
-                       Foreground="#FFF2F3F7"
-                       FontFamily="Consolas" />
+                RequestedTheme="Light"
+                Background="#FFF4F5F7"
+                CornerRadius="8"
+                Padding="6"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <Border x:Name="ToolbarDragHandle"
+                        Background="#FFE7E9ED"
+                        CornerRadius="5"
+                        Padding="8,7"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="拖动以移动工具条"
+                        PointerPressed="OnToolbarDragPressed"
+                        PointerMoved="OnToolbarDragMoved"
+                        PointerReleased="OnToolbarDragReleased"
+                        PointerCanceled="OnToolbarDragCanceled">
+                    <Canvas Width="18" Height="18"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsHitTestVisible="False">
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="2.5" Canvas.Top="2.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="7.5" Canvas.Top="2.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="12.5" Canvas.Top="2.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="2.5" Canvas.Top="7.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="7.5" Canvas.Top="7.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="12.5" Canvas.Top="7.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="2.5" Canvas.Top="12.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="7.5" Canvas.Top="12.5" />
+                        <Ellipse Width="3" Height="3" Fill="#FF555B64" Canvas.Left="12.5" Canvas.Top="12.5" />
+                    </Canvas>
+                </Border>
+                <TextBox x:Name="SelectionWidthBox"
+                         Width="70" MinWidth="54" Height="36"
+                         Padding="0"
+                         VerticalContentAlignment="Top"
+                         FontFamily="Consolas"
+                         InputScope="Number"
+                         TextChanged="OnDimensionTextChanged"
+                         LostFocus="OnDimensionLostFocus"
+                         KeyDown="OnDimensionKeyDown"
+                         ToolTipService.ToolTip="选区宽度（像素）" />
+                <TextBlock Text="×" VerticalAlignment="Center"
+                           Foreground="#FF555B64" />
+                <TextBox x:Name="SelectionHeightBox"
+                         Width="70" MinWidth="54" Height="36"
+                         Padding="0"
+                         VerticalContentAlignment="Top"
+                         FontFamily="Consolas"
+                         InputScope="Number"
+                         TextChanged="OnDimensionTextChanged"
+                         LostFocus="OnDimensionLostFocus"
+                         KeyDown="OnDimensionKeyDown"
+                         ToolTipService.ToolTip="选区高度（像素）" />
+                <TextBlock Text="px" VerticalAlignment="Center"
+                           Margin="0,0,4,0"
+                           Foreground="#FF737780" />
+                <Button Background="Transparent" Foreground="#FF202124"
+                        BorderThickness="0" Padding="10,8"
+                        Click="OnConfirmClick">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <SymbolIcon Symbol="Accept" />
+                        <TextBlock Text="识别 (Enter)" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Background="Transparent" Foreground="#FF202124"
+                        BorderThickness="0" Padding="10,8"
+                        Click="OnReselectClick">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <SymbolIcon Symbol="Refresh" />
+                        <TextBlock Text="重新选择" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Background="Transparent" Foreground="#FF202124"
+                        BorderThickness="0" Padding="10,8"
+                        Click="OnCancelClick">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <SymbolIcon Symbol="Cancel" />
+                        <TextBlock Text="取消 (Esc)" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </Border>
-
-        <!-- 确认工具条 -->
-        <CommandBar x:Name="Toolbar"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Background="#F21F1F26"
-                    CornerRadius="8"
-                    Visibility="Collapsed">
-            <AppBarButton Label="识别（Enter）" Icon="Accept"
-                          Click="OnConfirmClick" />
-            <AppBarButton Label="重新选择" Icon="Refresh"
-                          Click="OnReselectClick" />
-            <AppBarButton Label="取消（Esc）" Icon="Cancel"
-                          Click="OnCancelClick" />
-        </CommandBar>
 
         <!-- 错误提示 -->
         <InfoBar x:Name="ErrorBar"
