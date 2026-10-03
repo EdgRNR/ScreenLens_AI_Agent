@@ -411,22 +411,30 @@ namespace ScreenLens.WinUI.Views.Capture
             monitorLeft = Math.Max(0, monitorLeft);
             monitorTop = Math.Max(0, monitorTop);
             const double inset = 8;
-            const double gap = 10;
+            const double gap = 8;
 
             Toolbar.Visibility = Visibility.Visible;
             var maxToolbarWidth = Math.Max(1,
                 monitorRight - monitorLeft - inset * 2);
+            // Margin stores the toolbar's absolute position inside Root. XAML's
+            // Measure includes that margin in DesiredSize, so measuring again
+            // without clearing it makes the reported size grow by the previous
+            // position on every placement pass (and eventually sends the bar
+            // to a distant edge). Preserve manual coordinates, measure only
+            // the toolbar's content, then restore its position below.
+            var currentToolbarX = Toolbar.Margin.Left;
+            var currentToolbarY = Toolbar.Margin.Top;
+            Toolbar.Margin = new Thickness(0);
             Toolbar.Width = double.NaN;
             Toolbar.MaxWidth = maxToolbarWidth;
-            Toolbar.Measure(new Size(maxToolbarWidth,
-                Math.Max(1, monitorBottom - monitorTop)));
+            Toolbar.Measure(new Size(maxToolbarWidth, double.PositiveInfinity));
             var toolbarWidth = Math.Min(maxToolbarWidth,
                 Toolbar.DesiredSize.Width);
             var toolbarHeight = Toolbar.DesiredSize.Height;
 
             if (_toolbarManuallyPositioned)
             {
-                SetToolbarPosition(Toolbar.Margin.Left, Toolbar.Margin.Top,
+                SetToolbarPosition(currentToolbarX, currentToolbarY,
                     monitorLeft, monitorTop, monitorRight, monitorBottom,
                     toolbarWidth, toolbarHeight, inset);
                 return;
@@ -447,46 +455,88 @@ namespace ScreenLens.WinUI.Views.Capture
                 selectedBottom = selectedTop;
             }
 
-            var anchorX = Math.Clamp(_lastPointerPosition.X,
-                monitorLeft, monitorRight);
-            var anchorY = Math.Clamp(_lastPointerPosition.Y,
-                monitorTop, monitorBottom);
-            var candidates = new[]
-            {
-                (X: anchorX + gap, Y: anchorY - toolbarHeight / 2),
-                (X: anchorX - toolbarWidth - gap, Y: anchorY - toolbarHeight / 2),
-                (X: anchorX - toolbarWidth / 2, Y: anchorY + gap),
-                (X: anchorX - toolbarWidth / 2, Y: anchorY - toolbarHeight - gap),
-            };
+            // The toolbar is anchored to the selection bounds, not the pointer
+            // release coordinate. Use an explicit preference order so it does
+            // not jump to a distant side based on heuristic distance scores.
             var safeLeft = Math.Min(monitorRight - inset, monitorLeft + inset);
             var safeTop = Math.Min(monitorBottom - inset, monitorTop + inset);
             var safeRight = Math.Max(safeLeft, monitorRight - inset);
             var safeBottom = Math.Max(safeTop, monitorBottom - inset);
-            var bestX = safeLeft;
-            var bestY = safeTop;
-            var bestScore = double.PositiveInfinity;
-            foreach (var candidate in candidates)
+            var maxX = Math.Max(safeLeft, safeRight - toolbarWidth);
+            var maxY = Math.Max(safeTop, safeBottom - toolbarHeight);
+            var centeredX = Math.Clamp(
+                (selectedLeft + selectedRight - toolbarWidth) / 2,
+                safeLeft, maxX);
+            var centeredY = Math.Clamp(
+                (selectedTop + selectedBottom - toolbarHeight) / 2,
+                safeTop, maxY);
+            double bestX;
+            double bestY;
+            string chosenSide;
+            // The order is intentional and deterministic: below, above, right,
+            // then left. Each side is accepted only when the complete toolbar
+            // fits in the current monitor while remaining flush to the box.
+            var belowY = selectedBottom + gap;
+            var aboveY = selectedTop - toolbarHeight - gap;
+            var rightX = selectedRight + gap;
+            var leftX = selectedLeft - toolbarWidth - gap;
+            if (belowY <= maxY)
             {
-                var x = Math.Clamp(candidate.X, safeLeft,
-                    Math.Max(safeLeft, safeRight - toolbarWidth));
-                var y = Math.Clamp(candidate.Y, safeTop,
-                    Math.Max(safeTop, safeBottom - toolbarHeight));
-                var dx = Math.Max(0, Math.Max(x - anchorX, anchorX - (x + toolbarWidth)));
-                var dy = Math.Max(0, Math.Max(y - anchorY, anchorY - (y + toolbarHeight)));
-                var overlapX = Math.Max(0, Math.Min(selectedRight, x + toolbarWidth) - Math.Max(selectedLeft, x));
-                var overlapY = Math.Max(0, Math.Min(selectedBottom, y + toolbarHeight) - Math.Max(selectedTop, y));
-                var score = Math.Sqrt(dx * dx + dy * dy)
-                    + (overlapX * overlapY > 0 ? 10000 + overlapX * overlapY : 0);
-                if (score < bestScore)
+                chosenSide = "below";
+                bestX = centeredX;
+                bestY = belowY;
+            }
+            else if (aboveY >= safeTop)
+            {
+                chosenSide = "above";
+                bestX = centeredX;
+                bestY = aboveY;
+            }
+            else if (rightX <= maxX)
+            {
+                chosenSide = "right";
+                bestX = rightX;
+                bestY = centeredY;
+            }
+            else if (leftX >= safeLeft)
+            {
+                chosenSide = "left";
+                bestX = leftX;
+                bestY = centeredY;
+            }
+            else
+            {
+                // If the selected area consumes the monitor, no side can fit
+                // without overlap. Keep the toolbar visible and choose the
+                // fallback with the smallest overlap, in the same priority order.
+                var candidates = new[]
                 {
-                    bestScore = score;
-                    bestX = x;
-                    bestY = y;
-                }
+                    (Side: "below", X: centeredX, Y: belowY),
+                    (Side: "above", X: centeredX, Y: aboveY),
+                    (Side: "right", X: rightX, Y: centeredY),
+                    (Side: "left", X: leftX, Y: centeredY),
+                };
+                var fallback = candidates
+                    .Select((candidate, index) =>
+                    {
+                        var x = Math.Clamp(candidate.X, safeLeft, maxX);
+                        var y = Math.Clamp(candidate.Y, safeTop, maxY);
+                        var overlapX = Math.Max(0, Math.Min(selectedRight, x + toolbarWidth) - Math.Max(selectedLeft, x));
+                        var overlapY = Math.Max(0, Math.Min(selectedBottom, y + toolbarHeight) - Math.Max(selectedTop, y));
+                        return (candidate.Side, X: x, Y: y,
+                            Score: overlapX * overlapY * 10000 + index);
+                    })
+                    .OrderBy(candidate => candidate.Score)
+                    .First();
+                chosenSide = fallback.Side;
+                bestX = fallback.X;
+                bestY = fallback.Y;
             }
 
             SetToolbarPosition(bestX, bestY, monitorLeft, monitorTop,
                 monitorRight, monitorBottom, toolbarWidth, toolbarHeight, inset);
+            App.WriteLifecycleLog(
+                $"截图工具条定位：side={chosenSide}, placed=({bestX:F1},{bestY:F1}), toolbar=({toolbarWidth:F1}x{toolbarHeight:F1}), safe=({safeLeft:F1},{safeTop:F1},{safeRight:F1},{safeBottom:F1}), selection=({_sel.X:F1},{_sel.Y:F1},{_sel.Width:F1},{_sel.Height:F1}), monitor=({monitor.X},{monitor.Y},{monitor.Width},{monitor.Height})");
         }
 
         private void SetToolbarPosition(double x, double y,
