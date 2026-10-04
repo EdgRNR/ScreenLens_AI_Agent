@@ -126,26 +126,44 @@
             </StackPanel>
         </Border>
 
-        <!-- 错误提示 -->
-        <InfoBar x:Name="ErrorBar"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Top"
-                 Margin="0,80,0,0"
-                 MaxWidth="520"
-                 IsClosable="True" />
+        <!-- 错误提示在当前操作的显示器内居中；长消息在该屏范围内滚动。 -->
+        <Grid x:Name="ErrorRegion"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Top"
+              Visibility="Collapsed">
+            <ScrollViewer x:Name="ErrorScroll"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Top"
+                          HorizontalContentAlignment="Stretch"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto"
+                          Margin="16,80,16,16"
+                          MaxWidth="520">
+                <InfoBar x:Name="ErrorBar"
+                         IsClosable="True"
+                         Closed="OnCaptureErrorClosed" />
+            </ScrollViewer>
+        </Grid>
 
         <!-- 识别中覆盖层 -->
         <Grid x:Name="BusyOverlay"
               Background="#88000000"
               Visibility="Collapsed">
-            <StackPanel HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="14">
-                <ProgressRing IsActive="True" Width="44" Height="44" />
-                <TextBlock x:Name="BusyText" Text="正在识别…"
-                           Foreground="#FFF2F3F7" FontSize="14"
-                           HorizontalAlignment="Center" />
-            </StackPanel>
+            <!-- 保留全桌面的遮罩和输入阻挡，只把加载内容限制到操作屏幕。 -->
+            <Grid x:Name="BusyMonitorRegion"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Top">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="16"
+                            Spacing="14">
+                    <ProgressRing IsActive="True" Width="44" Height="44" />
+                    <TextBlock x:Name="BusyText" Text="正在识别…"
+                               Foreground="#FFF2F3F7" FontSize="14"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

@@ -46,6 +46,7 @@ namespace ScreenLens.WinUI.Views.Capture
         private readonly List<Point> _freeformPoints = new();
         private readonly List<Border> _hintBars = new();
         private Windows.Graphics.RectInt32? _selectionMonitor;
+        private Windows.Graphics.RectInt32? _feedbackMonitor;
         private bool _freeformSelection;
         private Windows.Graphics.RectInt32? _toolbarMonitor;
         private bool _toolbarDragging;
@@ -71,6 +72,13 @@ namespace ScreenLens.WinUI.Views.Capture
         private const int GwHwndPrev = 3;
         private const int GwlExStyle = -20;
         private const long WsExTopmost = 0x00000008L;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativePoint { internal int X, Y; }
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetCursorPos(out NativePoint point);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hwnd,
@@ -131,6 +139,7 @@ namespace ScreenLens.WinUI.Views.Capture
             // Place the HWND over the full virtual desktop before it is first
             // shown; activation should not briefly expose the primary monitor.
             ApplyCaptureMonitorBounds();
+            Root.SizeChanged += (_, _) => PositionCaptureFeedback();
 
             Root.Loaded += (_, _) =>
             {
@@ -139,6 +148,7 @@ namespace ScreenLens.WinUI.Views.Capture
                     Root.Focus(FocusState.Programmatic);
                     App.WriteLifecycleLog($"截图选区已布局：virtualOrigin=({_shot.OriginX},{_shot.OriginY}), pixels={_shot.Width}x{_shot.Height}, dips={Root.ActualWidth:F1}x{Root.ActualHeight:F1}, pixelScale=({PixelScaleX:F3},{PixelScaleY:F3}), hwnd={WindowBounds}");
                     CreateMonitorHints();
+                    PositionCaptureFeedback();
                     if (_presetRegion is { } r)
                     {
                         ApplyPresetRegion(r);
@@ -149,8 +159,7 @@ namespace ScreenLens.WinUI.Views.Capture
                 {
                     App.WriteLifecycleLog($"截图选区窗口布局失败：{ex.GetType().Name}: {ex.Message}");
                     LogCrash("SelectionWindow.Loaded", ex);
-                    ErrorBar.Message = $"截图界面初始化失败：{ex.Message}";
-                    ErrorBar.IsOpen = true;
+                    ShowCaptureError($"截图界面初始化失败：{ex.Message}");
                 }
             };
         }
@@ -308,8 +317,7 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 LogCrash("LoadShotImageAsync", e);
                 App.WriteLifecycleLog($"截图选区背景加载失败：{e.GetType().Name}: {e.Message}");
-                ErrorBar.Message = $"截图背景加载失败：{e.Message}";
-                ErrorBar.IsOpen = true;
+                ShowCaptureError($"截图背景加载失败：{e.Message}");
             }
         }
 
@@ -428,6 +436,65 @@ namespace ScreenLens.WinUI.Views.Capture
         {
             foreach (var bar in _hintBars)
                 bar.Visibility = visibility;
+        }
+
+        private Windows.Graphics.RectInt32 ResolveFeedbackMonitor()
+        {
+            // Cross-monitor selections use the display where drawing ended,
+            // matching the toolbar. Before selection, use the cursor's display.
+            if (_toolbarMonitor is { } toolbarMonitor) return toolbarMonitor;
+            if (_selectionMonitor is { } selectionMonitor) return selectionMonitor;
+            if (GetCursorPos(out var cursor))
+                return GetMonitorAtRootPoint(new Point(
+                    (cursor.X - _shot.OriginX) / PixelScaleX,
+                    (cursor.Y - _shot.OriginY) / PixelScaleY));
+            return GetMonitorAtRootPoint(_lastPointerPosition);
+        }
+
+        private void PositionCaptureFeedback()
+        {
+            if (Root.ActualWidth <= 0 || Root.ActualHeight <= 0) return;
+            var monitor = _feedbackMonitor ?? ResolveFeedbackMonitor();
+            var left = Math.Clamp((monitor.X - _shot.OriginX) / PixelScaleX,
+                0, Root.ActualWidth);
+            var top = Math.Clamp((monitor.Y - _shot.OriginY) / PixelScaleY,
+                0, Root.ActualHeight);
+            var right = Math.Clamp((monitor.X - _shot.OriginX + monitor.Width) / PixelScaleX,
+                left, Root.ActualWidth);
+            var bottom = Math.Clamp((monitor.Y - _shot.OriginY + monitor.Height) / PixelScaleY,
+                top, Root.ActualHeight);
+            foreach (var region in new[] { ErrorRegion, BusyMonitorRegion })
+            {
+                region.Margin = new Thickness(left, top, 0, 0);
+                region.Width = right - left;
+                region.Height = bottom - top;
+            }
+            var inset = Math.Min(16, Math.Min(right - left, bottom - top) / 4);
+            var errorTop = Math.Min(80, (bottom - top) / 4);
+            ErrorScroll.Margin = new Thickness(inset, errorTop, inset, inset);
+        }
+
+        private void ShowCaptureError(string message)
+        {
+            // Keep an OCR error on the same display as its loading indicator,
+            // even if the user moves the pointer while awaiting the backend.
+            _feedbackMonitor ??= ResolveFeedbackMonitor();
+            PositionCaptureFeedback();
+            ErrorBar.Message = message;
+            ErrorBar.Severity = InfoBarSeverity.Error;
+            ErrorRegion.Visibility = Visibility.Visible;
+            ErrorBar.IsOpen = true;
+        }
+
+        private void HideCaptureError()
+        {
+            ErrorBar.IsOpen = false;
+            ErrorRegion.Visibility = Visibility.Collapsed;
+        }
+
+        private void OnCaptureErrorClosed(InfoBar sender, InfoBarClosedEventArgs args)
+        {
+            if (!sender.IsOpen) ErrorRegion.Visibility = Visibility.Collapsed;
         }
 
         private Windows.Graphics.RectInt32 GetMonitorAtRootPoint(Point point)
@@ -613,7 +680,7 @@ namespace ScreenLens.WinUI.Views.Capture
         private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
         {
             if (BusyOverlay.Visibility == Visibility.Visible) return;
-            if (IsWithinToolbar(e.OriginalSource as DependencyObject)) return;
+            if (IsWithinSelectionControls(e.OriginalSource as DependencyObject)) return;
             var p = e.GetCurrentPoint(Root);
             if (!p.Properties.IsLeftButtonPressed) return;
 
@@ -623,6 +690,8 @@ namespace ScreenLens.WinUI.Views.Capture
             _lastPointerPosition = _start;
             _selectionMonitor = GetMonitorAtRootPoint(_start);
             _toolbarMonitor = _selectionMonitor;
+            _feedbackMonitor = null;
+            HideCaptureError();
             HideToolbar();
             Root.CapturePointer(e.Pointer);
             _freeformPoints.Clear();
@@ -921,11 +990,11 @@ namespace ScreenLens.WinUI.Views.Capture
             }
         }
 
-        private bool IsWithinToolbar(DependencyObject? source)
+        private bool IsWithinSelectionControls(DependencyObject? source)
         {
             while (source is not null)
             {
-                if (ReferenceEquals(source, Toolbar))
+                if (ReferenceEquals(source, Toolbar) || ReferenceEquals(source, ErrorRegion))
                     return true;
                 source = VisualTreeHelper.GetParent(source);
             }
@@ -1013,6 +1082,8 @@ namespace ScreenLens.WinUI.Views.Capture
         private void OnReselectClick(object sender, RoutedEventArgs e)
         {
             HideToolbar();
+            HideCaptureError();
+            _feedbackMonitor = null;
             _sel = new Rect(0, 0, 0, 0);
             _selectionMonitor = null;
             _toolbarMonitor = null;
@@ -1050,6 +1121,9 @@ namespace ScreenLens.WinUI.Views.Capture
             if (_confirmed) return;
             _confirmed = true;
             HideToolbar();
+            HideCaptureError();
+            _feedbackMonitor = ResolveFeedbackMonitor();
+            PositionCaptureFeedback();
             SetHintVisibility(Visibility.Collapsed);
 
             // 客户区逻辑坐标 → 虚拟桌面截图像素坐标。
@@ -1125,18 +1199,14 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 _confirmed = false;
                 BusyOverlay.Visibility = Visibility.Collapsed;
-                ErrorBar.Message = ex.Message;
-                ErrorBar.Severity = InfoBarSeverity.Error;
-                ErrorBar.IsOpen = true;
+                ShowCaptureError(ex.Message);
                 SetHintVisibility(Visibility.Visible);
             }
             catch (Exception ex)
             {
                 _confirmed = false;
                 BusyOverlay.Visibility = Visibility.Collapsed;
-                ErrorBar.Message = $"识别失败：{ex.Message}";
-                ErrorBar.Severity = InfoBarSeverity.Error;
-                ErrorBar.IsOpen = true;
+                ShowCaptureError($"识别失败：{ex.Message}");
                 SetHintVisibility(Visibility.Visible);
             }
         }
