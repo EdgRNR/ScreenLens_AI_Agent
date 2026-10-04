@@ -101,7 +101,9 @@
         <!-- ④ 指针交互捕获层（透明，位于工具条之下，可聚焦以接收键盘） -->
         <Grid x:Name="HitLayer" Background="Transparent" IsTabStop="True" TabIndex="0"
               PointerPressed="OnPointerPressed" PointerMoved="OnPointerMoved"
-              PointerReleased="OnPointerReleased" PointerCanceled="OnPointerReleased" />
+              PointerReleased="OnPointerReleased"
+              PointerCanceled="OnSelectionPointerCanceled"
+              PointerCaptureLost="OnSelectionPointerCanceled" />
 
         <!-- ⑤ 浮动工具条 -->
         <Canvas x:Name="OverlayCanvas">
@@ -109,8 +111,7 @@
                     Background="{ThemeResource AppBadgeBgBrush}" BorderThickness="1"
                     BorderBrush="{ThemeResource AppCardBorderBrush}">
                 <StackPanel Orientation="Horizontal" Spacing="4">
-                    <RadioButton x:Name="ModeRect" GroupName="DemoMode" Content="矩形" IsChecked="True" Checked="OnModeChanged" MinWidth="0" />
-                    <RadioButton x:Name="ModeFree" GroupName="DemoMode" Content="自由圈选" Checked="OnModeChanged" MinWidth="0" />
+                    <TextBlock x:Name="SelectionModeText" Text="矩形" VerticalAlignment="Center" Margin="8,0" />
                     <AppBarSeparator />
                     <Button Click="OnMagnifierClick" ToolTipService.ToolTip="放大镜（演示）">
                         <FontIcon Glyph="&#xE8A3;" FontSize="14" />

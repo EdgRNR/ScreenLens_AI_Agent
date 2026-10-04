@@ -144,17 +144,54 @@ namespace ScreenLens.WinUI.ViewModels
         public bool StartMinimized { get => _startMinimized; set => Set(ref _startMinimized, value); }
 
         // ---------- 截图与选区 ----------
-        /// <summary>0 = 矩形选区，1 = 自由圈选</summary>
-        private int _defaultCaptureMode;
-        public int DefaultCaptureMode
+        /// <summary>左键选区：0 = 矩形选区，1 = 自由圈选（默认）</summary>
+        private int _leftCaptureMode = 1;
+        public int LeftCaptureMode
         {
-            get => _defaultCaptureMode;
+            get => _leftCaptureMode;
             set
             {
-                if (Set(ref _defaultCaptureMode, value) && !SuppressPersist)
+                if (value is not (0 or 1)) return;
+                if (Set(ref _leftCaptureMode, value) && !SuppressPersist)
                 {
                     SettingsService.SaveFrontendDebounced(this);
                 }
+            }
+        }
+
+        /// <summary>右键选区：0 = 矩形选区（默认），1 = 自由圈选</summary>
+        private int _rightCaptureMode;
+        public int RightCaptureMode
+        {
+            get => _rightCaptureMode;
+            set
+            {
+                if (value is not (0 or 1)) return;
+                if (Set(ref _rightCaptureMode, value) && !SuppressPersist)
+                    SettingsService.SaveFrontendDebounced(this);
+            }
+        }
+
+        private bool _captureDimMaskEnabled = true;
+        public bool CaptureDimMaskEnabled
+        {
+            get => _captureDimMaskEnabled;
+            set
+            {
+                if (Set(ref _captureDimMaskEnabled, value) && !SuppressPersist)
+                    SettingsService.SaveFrontendDebounced(this);
+            }
+        }
+
+        /// <summary>仅控制自由圈选的外接矩形边框，不控制圈选轨迹。</summary>
+        private bool _freeformBorderEnabled = true;
+        public bool FreeformBorderEnabled
+        {
+            get => _freeformBorderEnabled;
+            set
+            {
+                if (Set(ref _freeformBorderEnabled, value) && !SuppressPersist)
+                    SettingsService.SaveFrontendDebounced(this);
             }
         }
 

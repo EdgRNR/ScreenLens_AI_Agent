@@ -11,17 +11,32 @@
     <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="截图与选区" Style="{StaticResource PageTitleText}" />
-        <TextBlock Text="控制屏幕截取时的选区行为（原型演示）" Style="{StaticResource PageSubtitleText}" />
+        <TextBlock Text="设置鼠标选区方式、背景遮罩与确认行为" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="选区" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE8B6;" Title="默认选区模式" Description="进入截图后首先使用的选区形状">
-            <ComboBox SelectedIndex="{x:Bind Vm.DefaultCaptureMode, Mode=TwoWay}" MinWidth="160">
+        <controls:SettingCard Icon="&#xE8B6;" Title="鼠标左键选区" Description="按住左键拖动时使用的形状，默认自由圈选">
+            <ComboBox SelectedIndex="{x:Bind Vm.LeftCaptureMode, Mode=TwoWay}" MinWidth="160" AutomationProperties.Name="鼠标左键选区方式">
                 <ComboBoxItem Content="矩形选区" />
                 <ComboBoxItem Content="自由圈选" />
             </ComboBox>
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE8E5;" Title="选区后显示确认工具条" Description="开启：松开鼠标后显示确认 / 取消工具条，点击确认才进入识别；关闭：松开鼠标直接开始识别（演示中直接打开结果预览）">
+        <controls:SettingCard Icon="&#xE8B6;" Title="鼠标右键选区" Description="按住右键拖动时使用的形状，默认矩形选区">
+            <ComboBox SelectedIndex="{x:Bind Vm.RightCaptureMode, Mode=TwoWay}" MinWidth="160" AutomationProperties.Name="鼠标右键选区方式">
+                <ComboBoxItem Content="矩形选区" />
+                <ComboBoxItem Content="自由圈选" />
+            </ComboBox>
+        </controls:SettingCard>
+
+        <controls:SettingCard Icon="&#xE7EF;" Title="自由圈选外接矩形边框" Description="关闭后仅隐藏圈选区域的外接矩形边框，圈选轨迹始终显示；矩形模式不受影响">
+            <ToggleSwitch IsOn="{x:Bind Vm.FreeformBorderEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="自由圈选外接矩形边框" />
+        </controls:SettingCard>
+
+        <controls:SettingCard Icon="&#xE790;" Title="选区背景黑色遮罩" Description="开启后压暗选区外的画面；关闭后保持截图原始亮度">
+            <ToggleSwitch IsOn="{x:Bind Vm.CaptureDimMaskEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="选区背景黑色遮罩" />
+        </controls:SettingCard>
+
+        <controls:SettingCard Icon="&#xE8E5;" Title="选区后显示确认工具条" Description="开启：松开鼠标后显示确认 / 取消工具条；关闭：松开鼠标直接开始识别">
             <ToggleSwitch IsOn="{x:Bind Vm.ConfirmOnRelease, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
@@ -33,15 +48,15 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="工具条行为说明" Style="{StaticResource CardTitleText}" Margin="0,0,0,4" />
                 <TextBlock Style="{StaticResource CardDescText}" Text="· 工具条仅在选区形成后出现，靠近选区下边缘（空间不足时自动上移）" />
-                <TextBlock Style="{StaticResource CardDescText}" Text="· 矩形 / 自由圈选：切换本次截图的选区形状" />
-                <TextBlock Style="{StaticResource CardDescText}" Text="· 放大镜：逐像素微调选区边界（尚未接入）" />
+                <TextBlock Style="{StaticResource CardDescText}" Text="· 左键 / 右键：按上方设置绘制自由圈选或矩形选区" />
+                <TextBlock Style="{StaticResource CardDescText}" Text="· 宽度 / 高度：修改选区的像素尺寸；拖动手柄可移动工具条" />
                 <TextBlock Style="{StaticResource CardDescText}" Text="· 取消：退出本次截图；确认：立即开始识别" />
-                <TextBlock Style="{StaticResource CardDescText}" Text="· 键盘：Enter 确认，Esc 取消，方向键微调选区位置" />
+                <TextBlock Style="{StaticResource CardDescText}" Text="· 键盘：Enter 确认，Esc 取消" />
             </StackPanel>
         </Border>
 
         <TextBlock Text="演示" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE722;" Title="截图选区演示" Description="在模拟桌面上体验选区遮罩、尺寸反馈与工具条（不截取真实屏幕）；是否显示确认工具条跟随上方开关">
+        <controls:SettingCard Icon="&#xE722;" Title="截图选区演示" Description="在模拟桌面上体验选区（不截取真实屏幕）；左右键形状、圈选边框、黑色遮罩与确认行为跟随上方设置">
             <Button Content="打开演示窗口" Style="{StaticResource AppAccentButtonStyle}" Click="OnOpenDemoClick" />
         </controls:SettingCard>
 

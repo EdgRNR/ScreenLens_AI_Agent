@@ -22,6 +22,9 @@ namespace ScreenLens.WinUI.Views.Preview
         private readonly DemoSettings _vm = DemoSettings.Instance;
 
         private bool _dragging;
+        private bool _freeformSelection;
+        private bool _selectionUsesRightButton;
+        private uint _selectionPointerId;
         private Point _start;
         private Rect _sel;             // 当前选区（自由模式下为路径包围盒）
         private Rect _lastValidSel;   // 上一个有效选区（极小拖动时恢复）
@@ -42,6 +45,9 @@ namespace ScreenLens.WinUI.Views.Preview
 
             // 跟随主窗口当前主题
             Root.RequestedTheme = App.ResolveTheme(_vm.ThemeMode);
+            MaskCanvas.Visibility = _vm.CaptureDimMaskEnabled ? Visibility.Visible : Visibility.Collapsed;
+            ModeHint.Message = $"左键：{(_vm.LeftCaptureMode == 1 ? "自由圈选" : "矩形")}；右键：{(_vm.RightCaptureMode == 1 ? "自由圈选" : "矩形")}。按住对应按键拖动，Enter 确认，Esc 取消。";
+            ModeHint.IsOpen = true;
 
             Root.SizeChanged += OnRootSizeChanged;
             Root.Loaded += (_, _) => HitLayer.Focus(FocusState.Programmatic);
@@ -72,14 +78,22 @@ namespace ScreenLens.WinUI.Views.Preview
             _sel.Y = Math.Clamp(_sel.Y, 0, Math.Max(0, h - _sel.Height));
         }
 
-        // ---------- 指针交互（仅左键可启动选区） ----------
+        // ---------- 指针交互（左右键各自使用设置中的形状） ----------
 
-        private bool IsFreeMode => ModeFree?.IsChecked == true;
+        private bool IsFreeMode => _freeformSelection;
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
         {
+            if (_dragging) return;
             var p = e.GetCurrentPoint(Root);
-            if (!p.Properties.IsLeftButtonPressed) return; // 忽略右键 / 中键
+            var update = p.Properties.PointerUpdateKind;
+            if (update != Microsoft.UI.Input.PointerUpdateKind.LeftButtonPressed
+                && update != Microsoft.UI.Input.PointerUpdateKind.RightButtonPressed) return;
+            _selectionUsesRightButton = update == Microsoft.UI.Input.PointerUpdateKind.RightButtonPressed;
+            _selectionPointerId = e.Pointer.PointerId;
+            _freeformSelection = (_selectionUsesRightButton
+                ? _vm.RightCaptureMode : _vm.LeftCaptureMode) == 1;
+            SelectionModeText.Text = _freeformSelection ? "自由圈选" : "矩形";
 
             _dragging = true;
             _start = p.Position;
@@ -91,7 +105,6 @@ namespace ScreenLens.WinUI.Views.Preview
                 _freePoints.Clear();
                 _freePoints.Add(p.Position);
                 FreePath.Visibility = Visibility.Visible;
-                SelBorder.Visibility = Visibility.Collapsed;
                 _sel = new Rect(p.Position.X, p.Position.Y, 0, 0);
             }
             else
@@ -107,7 +120,7 @@ namespace ScreenLens.WinUI.Views.Preview
 
         private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
         {
-            if (!_dragging) return;
+            if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
             var p = e.GetCurrentPoint(Root);
             var x = Math.Clamp(p.Position.X, 0, Root.ActualWidth);
             var y = Math.Clamp(p.Position.Y, 0, Root.ActualHeight);
@@ -130,7 +143,24 @@ namespace ScreenLens.WinUI.Views.Preview
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            if (!_dragging) return;
+            if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
+            var p = e.GetCurrentPoint(Root);
+            if (_selectionUsesRightButton ? p.Properties.IsRightButtonPressed
+                : p.Properties.IsLeftButtonPressed) return;
+            var end = new Point(Math.Clamp(p.Position.X, 0, Root.ActualWidth),
+                Math.Clamp(p.Position.Y, 0, Root.ActualHeight));
+            if (IsFreeMode)
+            {
+                _freePoints.Add(end);
+                if (_freePoints.Count >= 3) _freePoints.Add(_freePoints[0]);
+                RedrawFreePath();
+                _sel = BoundingBox(_freePoints);
+            }
+            else
+            {
+                _sel = new Rect(Math.Min(_start.X, end.X), Math.Min(_start.Y, end.Y),
+                    Math.Abs(end.X - _start.X), Math.Abs(end.Y - _start.Y));
+            }
             _dragging = false;
             HitLayer.ReleasePointerCapture(e.Pointer);
 
@@ -144,6 +174,8 @@ namespace ScreenLens.WinUI.Views.Preview
                     FreePath.Visibility = Visibility.Collapsed;
                     SelBorder.Visibility = Visibility.Visible;
                 }
+                _freeformSelection = false;
+                SelectionModeText.Text = "矩形";
                 _sel = _lastValidSel;
                 ApplySelection();
                 ShowToolbar();
@@ -152,6 +184,7 @@ namespace ScreenLens.WinUI.Views.Preview
             }
 
             _lastValidSel = _sel;
+            ApplySelection();
 
             if (!_vm.ConfirmOnRelease)
             {
@@ -163,6 +196,21 @@ namespace ScreenLens.WinUI.Views.Preview
 
             ShowToolbar();
             e.Handled = true;
+        }
+
+        private void OnSelectionPointerCanceled(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
+            _dragging = false;
+            HitLayer.ReleasePointerCapture(e.Pointer);
+            _freeformSelection = false;
+            _freePoints.Clear();
+            FreePath.Visibility = Visibility.Collapsed;
+            SelBorder.Visibility = Visibility.Visible;
+            SelectionModeText.Text = "矩形";
+            _sel = _lastValidSel;
+            ApplySelection();
+            if (_vm.ConfirmOnRelease) ShowToolbar();
         }
 
         // ---------- 渲染 ----------
@@ -208,6 +256,8 @@ namespace ScreenLens.WinUI.Views.Preview
             MaskRight.Width = Math.Max(0, w - _sel.Right); MaskRight.Height = _sel.Height;
 
             // 矩形选区边框
+            SelBorder.Visibility = _freeformSelection && !_vm.FreeformBorderEnabled
+                ? Visibility.Collapsed : Visibility.Visible;
             Canvas.SetLeft(SelBorder, _sel.Left); Canvas.SetTop(SelBorder, _sel.Top);
             SelBorder.Width = _sel.Width; SelBorder.Height = _sel.Height;
 
@@ -233,34 +283,6 @@ namespace ScreenLens.WinUI.Views.Preview
         }
 
         // ---------- 工具条交互 ----------
-
-        private void OnModeChanged(object sender, RoutedEventArgs e)
-        {
-            if (ModeFree == null || ModeRect == null) return;
-
-            if (ModeFree.IsChecked == true)
-            {
-                ModeHint.Message = "自由圈选（演示）：按住左键拖拽绘制自由路径，确认时按路径包围盒识别。";
-                ModeHint.IsOpen = true;
-                // 清除矩形选区视觉，等待新路径
-                _freePoints.Clear();
-                FreePath.Visibility = Visibility.Visible;
-                SelBorder.Visibility = Visibility.Collapsed;
-                _sel = new Rect(0, 0, 0, 0);
-                ApplySelection();
-                Toolbar.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                ModeHint.IsOpen = false;
-                _freePoints.Clear();
-                FreePath.Visibility = Visibility.Collapsed;
-                SelBorder.Visibility = Visibility.Visible;
-                _sel = _lastValidSel;
-                ApplySelection();
-                ShowToolbar();
-            }
-        }
 
         private void OnMagnifierClick(object sender, RoutedEventArgs e)
         {

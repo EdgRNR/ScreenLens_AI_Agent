@@ -40,6 +40,8 @@ namespace ScreenLens.WinUI.Views.Capture
         private readonly RectangleGeometry _selectionGeometry = new();
 
         private bool _dragging;
+        private bool _selectionUsesRightButton;
+        private uint _selectionPointerId;
         private Point _start;
         private Point _lastPointerPosition;
         private Rect _sel;
@@ -101,7 +103,7 @@ namespace ScreenLens.WinUI.Views.Capture
             _shot = shot;
             _presetRegion = presetRegion;
             _autoRecognize = autoRecognize;
-            _freeformSelection = _vm.DefaultCaptureMode == 1;
+            _freeformSelection = _vm.LeftCaptureMode == 1;
             InitializeComponent();
             Closed += (_, _) =>
             {
@@ -149,6 +151,9 @@ namespace ScreenLens.WinUI.Views.Capture
         /// <summary>把命令行预置的物理像素矩形换算为逻辑选区。</summary>
         private void ApplyPresetRegion(Windows.Graphics.RectInt32 r)
         {
+            // A command-line region is rectangular regardless of mouse mappings.
+            _freeformSelection = false;
+            _freeformPoints.Clear();
             // 屏幕像素 → 虚拟桌面截图局部坐标 → XAML 客户区逻辑坐标。
             _sel = new Rect(
                 (r.X - _shot.OriginX) / PixelScaleX,
@@ -368,9 +373,8 @@ namespace ScreenLens.WinUI.Views.Capture
             ? _shot.Height / Root.ActualHeight
             : Root.XamlRoot?.RasterizationScale ?? 1.0;
 
-        private string HintMessage => _freeformSelection
-            ? "自由圈选屏幕区域 · Enter 确认 · Esc 取消"
-            : "拖拽选择识别区域 · Enter 确认 · Esc 取消";
+        private string HintMessage =>
+            $"左键：{(_vm.LeftCaptureMode == 1 ? "自由圈选" : "矩形")} · 右键：{(_vm.RightCaptureMode == 1 ? "自由圈选" : "矩形")} · Enter 确认 · Esc 取消";
 
         private void CreateMonitorHints()
         {
@@ -658,11 +662,18 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            if (BusyOverlay.Visibility == Visibility.Visible) return;
+            if (_dragging || BusyOverlay.Visibility == Visibility.Visible) return;
             if (IsWithinSelectionControls(e.OriginalSource as DependencyObject)) return;
             var p = e.GetCurrentPoint(Root);
-            if (!p.Properties.IsLeftButtonPressed) return;
+            var update = p.Properties.PointerUpdateKind;
+            if (update != Microsoft.UI.Input.PointerUpdateKind.LeftButtonPressed
+                && update != Microsoft.UI.Input.PointerUpdateKind.RightButtonPressed) return;
 
+            _selectionUsesRightButton = update == Microsoft.UI.Input.PointerUpdateKind.RightButtonPressed;
+            _selectionPointerId = e.Pointer.PointerId;
+            _freeformSelection = (_selectionUsesRightButton
+                ? _vm.RightCaptureMode : _vm.LeftCaptureMode) == 1;
+            FreeformLine.Visibility = Visibility.Collapsed;
             _dragging = true;
             _toolbarManuallyPositioned = false;
             _start = p.Position;
@@ -681,11 +692,12 @@ namespace ScreenLens.WinUI.Views.Capture
             }
             _sel = new Rect(_start.X, _start.Y, 0, 0);
             ApplySelection();
+            e.Handled = true;
         }
 
         private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
         {
-            if (!_dragging) return;
+            if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
             var p = e.GetCurrentPoint(Root);
             _lastPointerPosition = p.Position;
             if (_freeformSelection)
@@ -698,6 +710,7 @@ namespace ScreenLens.WinUI.Views.Capture
                     _freeformPoints.Add(p.Position);
                     UpdateFreeformBounds();
                 }
+                e.Handled = true;
                 return;
             }
             var w = Math.Abs(p.Position.X - _start.X);
@@ -707,12 +720,18 @@ namespace ScreenLens.WinUI.Views.Capture
                 Math.Min(_start.Y, p.Position.Y),
                 w, h);
             ApplySelection();
+            e.Handled = true;
         }
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            if (!_dragging) return;
-            var end = e.GetCurrentPoint(Root).Position;
+            if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
+            var point = e.GetCurrentPoint(Root);
+            // Releasing the other button must not finish the current stroke.
+            if (_selectionUsesRightButton ? point.Properties.IsRightButtonPressed
+                : point.Properties.IsLeftButtonPressed) return;
+            var end = point.Position;
+            e.Handled = true;
             _lastPointerPosition = end;
             _dragging = false;
             try { Root.ReleasePointerCapture(e.Pointer); }
@@ -761,6 +780,19 @@ namespace ScreenLens.WinUI.Views.Capture
             }
         }
 
+        private void OnSelectionPointerCanceled(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
+            _dragging = false;
+            Root.ReleasePointerCapture(e.Pointer);
+            _sel = new Rect(0, 0, 0, 0);
+            _freeformPoints.Clear();
+            _selectionMonitor = null;
+            _toolbarMonitor = null;
+            FreeformLine.Visibility = Visibility.Collapsed;
+            ApplySelection();
+        }
+
         private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (BusyOverlay.Visibility == Visibility.Visible)
@@ -791,8 +823,9 @@ namespace ScreenLens.WinUI.Views.Capture
         {
             var has = _sel.Width >= MinSize && _sel.Height >= MinSize;
             var vis = has ? Visibility.Visible : Visibility.Collapsed;
-            SelBorder.Visibility = vis;
-            DimMask.Visibility = vis;
+            SelBorder.Visibility = _freeformSelection && !_vm.FreeformBorderEnabled
+                ? Visibility.Collapsed : vis;
+            DimMask.Visibility = _vm.CaptureDimMaskEnabled ? vis : Visibility.Collapsed;
             if (!has)
             {
                 return;

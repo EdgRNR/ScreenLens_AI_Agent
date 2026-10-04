@@ -99,8 +99,12 @@ namespace ScreenLens.WinUI.Services
                         vm.ThemeMode = GetInt(prefs, "themeMode", 2);
                         vm.CardDensity = GetInt(prefs, "cardDensity", 0);
                         vm.AccentIndex = GetInt(prefs, "accentIndex", 0);
-                        vm.DefaultCaptureMode =
-                            GetInt(prefs, "captureMode", 0);
+                        // The old single captureMode preference is replaced by
+                        // independent button mappings with the new defaults.
+                        vm.LeftCaptureMode = GetInt(prefs, "leftCaptureMode", 1) == 0 ? 0 : 1;
+                        vm.RightCaptureMode = GetInt(prefs, "rightCaptureMode", 0) == 1 ? 1 : 0;
+                        vm.CaptureDimMaskEnabled = GetBool(prefs, "captureDimMaskEnabled", true);
+                        vm.FreeformBorderEnabled = GetBool(prefs, "freeformBorderEnabled", true);
                         vm.ConfirmOnRelease =
                             GetBool(prefs, "confirmOnRelease", true);
                         vm.ResultPosition = GetInt(prefs, "resultPosition", 0);
@@ -265,7 +269,10 @@ namespace ScreenLens.WinUI.Services
                         ["themeMode"] = vm.ThemeMode,
                         ["cardDensity"] = vm.CardDensity,
                         ["accentIndex"] = vm.AccentIndex,
-                        ["captureMode"] = vm.DefaultCaptureMode,
+                        ["leftCaptureMode"] = vm.LeftCaptureMode,
+                        ["rightCaptureMode"] = vm.RightCaptureMode,
+                        ["captureDimMaskEnabled"] = vm.CaptureDimMaskEnabled,
+                        ["freeformBorderEnabled"] = vm.FreeformBorderEnabled,
                         ["confirmOnRelease"] = vm.ConfirmOnRelease,
                         ["resultPosition"] = vm.ResultPosition,
                         ["fontSize"] = vm.OriginalFontSize,

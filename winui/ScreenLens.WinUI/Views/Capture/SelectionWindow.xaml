@@ -12,7 +12,9 @@
           KeyDown="OnRootKeyDown"
           PointerPressed="OnPointerPressed"
           PointerMoved="OnPointerMoved"
-          PointerReleased="OnPointerReleased">
+          PointerReleased="OnPointerReleased"
+          PointerCanceled="OnSelectionPointerCanceled"
+          PointerCaptureLost="OnSelectionPointerCanceled">
 
         <Image x:Name="ShotImage" Stretch="Fill" />
 
@@ -22,7 +24,7 @@
               IsHitTestVisible="False"
               Visibility="Collapsed" />
 
-        <!-- 自由圈选轨迹；保持现有截图界面，只在默认模式为自由圈选时显示 -->
+        <!-- 自由圈选轨迹；按开始绘制的鼠标按键对应的模式显示 -->
         <Polyline x:Name="FreeformLine"
                   Stroke="{ThemeResource ScreenLensAccentBrush}"
                   StrokeThickness="2"
