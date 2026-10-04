@@ -1,4 +1,7 @@
+using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using ScreenLens.WinUI.Services;
@@ -30,6 +33,8 @@ namespace ScreenLens.WinUI.Views.Result
         private bool _translating;
         private bool _closed;
         private bool? _actionsStacked;
+        private InputNonClientPointerSource? _captionPointerSource;
+        private RectInt32? _captionRect;
 
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hwnd);
@@ -54,10 +59,12 @@ namespace ScreenLens.WinUI.Views.Result
             {
                 _closed = true;
                 _vm.ThemeModeChanged -= ApplyTheme;
+                AppWindow.Changed -= OnAppWindowChanged;
             };
             App.RegisterResultWindow(this);
 
             Title = "识别结果 — ScreenLens";
+            ConfigureWindowChrome();
 
             OcrText.Text = _ocrText;
             OcrText.FontSize = _vm.OriginalFontSize switch
@@ -92,6 +99,69 @@ namespace ScreenLens.WinUI.Views.Result
                 UpdateActionLayout();
             };
             Root.SizeChanged += (_, _) => UpdateActionLayout();
+            HeaderDragArea.LayoutUpdated += (_, _) => UpdateDragRegion();
+        }
+
+        private void ConfigureWindowChrome()
+        {
+            if (AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                // Keep the native resize border, but remove the separate
+                // system caption, icon and caption buttons entirely.
+                presenter.SetBorderAndTitleBar(true, false);
+                presenter.IsResizable = true;
+                presenter.IsMinimizable = true;
+                presenter.IsMaximizable = true;
+            }
+            _captionPointerSource = InputNonClientPointerSource.GetForWindowId(AppWindow.Id);
+            AppWindow.Changed += OnAppWindowChanged;
+            UpdateMaximizeButton();
+        }
+
+        private void UpdateDragRegion()
+        {
+            if (_closed || _captionPointerSource is null || Root.XamlRoot is null)
+                return;
+            if (HeaderDragArea.ActualWidth <= 0 || HeaderDragArea.ActualHeight <= 0)
+            {
+                // A very narrow window can give the title no space. Do not
+                // leave the previous larger drag rectangle over the buttons.
+                if (_captionRect is not null)
+                {
+                    _captionPointerSource.ClearRegionRects(NonClientRegionKind.Caption);
+                    _captionRect = null;
+                }
+                return;
+            }
+
+            // Non-client regions use client-relative physical pixels. Recheck
+            // after layout so resizing and moving between DPI scales stay aligned.
+            var scale = Root.XamlRoot.RasterizationScale;
+            var origin = HeaderDragArea.TransformToVisual(Root)
+                .TransformPoint(new Windows.Foundation.Point(0, 0));
+            var rect = new RectInt32(
+                (int)Math.Round(origin.X * scale),
+                (int)Math.Round(origin.Y * scale),
+                (int)Math.Round(HeaderDragArea.ActualWidth * scale),
+                (int)Math.Round(HeaderDragArea.ActualHeight * scale));
+            if (_captionRect is { } previous && previous.X == rect.X && previous.Y == rect.Y
+                && previous.Width == rect.Width && previous.Height == rect.Height)
+                return;
+            _captionPointerSource.SetRegionRects(NonClientRegionKind.Caption, new[] { rect });
+            _captionRect = rect;
+        }
+
+        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+            => UpdateMaximizeButton();
+
+        private void UpdateMaximizeButton()
+        {
+            var maximized = AppWindow.Presenter is OverlappedPresenter presenter
+                && presenter.State == OverlappedPresenterState.Maximized;
+            MaximizeIcon.Glyph = maximized ? "\uE923" : "\uE922";
+            var label = maximized ? "还原" : "最大化";
+            ToolTipService.SetToolTip(MaximizeBtn, label);
+            AutomationProperties.SetName(MaximizeBtn, label);
         }
 
         private void ApplyTheme(int mode)
@@ -213,6 +283,21 @@ namespace ScreenLens.WinUI.Views.Result
         }
 
         // ---------------------------------------------------------- 操作
+
+        private void OnMinimizeClick(object sender, RoutedEventArgs e)
+        {
+            if (AppWindow.Presenter is OverlappedPresenter presenter)
+                presenter.Minimize();
+        }
+
+        private void OnMaximizeClick(object sender, RoutedEventArgs e)
+        {
+            if (AppWindow.Presenter is not OverlappedPresenter presenter) return;
+            if (presenter.State == OverlappedPresenterState.Maximized)
+                presenter.Restore();
+            else
+                presenter.Maximize();
+        }
 
         private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 

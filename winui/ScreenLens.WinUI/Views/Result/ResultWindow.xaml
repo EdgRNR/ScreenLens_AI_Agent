@@ -8,6 +8,7 @@
     mc:Ignorable="d">
 
     <Grid x:Name="Root" Padding="16,12,16,14" RowSpacing="10"
+          KeyDown="OnRootKeyDown"
           Background="{ThemeResource AppWindowBgBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -17,29 +18,47 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 标题行 -->
+        <!-- 内容标题兼作拖动区域；窗口操作按钮不进入拖动区域。 -->
         <Grid Grid.Row="0" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="8">
+            <StackPanel x:Name="HeaderDragArea" Background="Transparent">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE8A5;" FontSize="15"
                               Foreground="{ThemeResource AppTextSecondaryBrush}" />
-                    <TextBlock Text="识别结果" FontSize="15" FontWeight="SemiBold"
+                    <TextBlock Grid.Column="1" Text="识别结果" FontSize="15" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
                                Foreground="{ThemeResource AppTextPrimaryBrush}"
                                VerticalAlignment="Center" />
-                </StackPanel>
+                </Grid>
                 <TextBlock x:Name="MetaText" FontSize="12" TextTrimming="CharacterEllipsis"
                            Foreground="{ThemeResource AppTextTertiaryBrush}"
                            Margin="0,2,0,0" />
             </StackPanel>
-            <Button x:Name="CloseBtn" Grid.Column="1" Click="OnCloseClick"
-                    HorizontalAlignment="Right"
-                    Content="&#xE711;" FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                    FontSize="13" Width="32" Height="32" Padding="0"
-                    ToolTipService.ToolTip="关闭（Esc）" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
+                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="MinimizeBtn" Click="OnMinimizeClick"
+                        Width="32" MinWidth="32" Height="32" Padding="0"
+                        ToolTipService.ToolTip="最小化" AutomationProperties.Name="最小化">
+                    <FontIcon Glyph="&#xE921;" FontSize="13" />
+                </Button>
+                <Button x:Name="MaximizeBtn" Click="OnMaximizeClick"
+                        Width="32" MinWidth="32" Height="32" Padding="0"
+                        ToolTipService.ToolTip="最大化" AutomationProperties.Name="最大化">
+                    <FontIcon x:Name="MaximizeIcon" Glyph="&#xE922;" FontSize="13" />
+                </Button>
+                <Button x:Name="CloseBtn" Click="OnCloseClick"
+                        Width="32" MinWidth="32" Height="32" Padding="0"
+                        ToolTipService.ToolTip="关闭（Esc）" AutomationProperties.Name="关闭">
+                    <FontIcon Glyph="&#xE8BB;" FontSize="13" />
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- 原文 -->
