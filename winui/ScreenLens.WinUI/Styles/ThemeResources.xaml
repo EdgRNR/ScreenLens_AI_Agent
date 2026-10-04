@@ -27,7 +27,6 @@
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#5F5F5F" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedDisabled" Color="#8A8A8A" />
             <SolidColorBrush x:Key="AppDividerBrush" Color="#E4E4E4" />
-            <SolidColorBrush x:Key="AppMaskBrush" Color="#66000000" />
             <SolidColorBrush x:Key="AppBadgeBgBrush" Color="#2B2B2B" />
             <SolidColorBrush x:Key="AppBadgeFgBrush" Color="#FFFFFF" />
 
@@ -38,10 +37,8 @@
             <SolidColorBrush x:Key="CaptureToolbarPrimaryBrush" Color="#202124" />
             <SolidColorBrush x:Key="CaptureToolbarSecondaryBrush" Color="#737780" />
 
-            <!-- ScreenLens 强调色（运行时可由 App.ApplyAccent 替换） -->
+            <!-- 截图选区使用固定的 ScreenLens 蓝。 -->
             <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
-            <SolidColorBrush x:Key="ScreenLensAccentHoverBrush" Color="#5CA8FF" />
-            <SolidColorBrush x:Key="ScreenLensAccentPressedBrush" Color="#2B7FE0" />
 
             <!-- 禁用的 ToggleSwitch 仍保留可辨识的轨道，避免浅色卡片上只剩灰色圆点。 -->
             <SolidColorBrush x:Key="ToggleSwitchFillOffDisabled" Color="#F4F4F4" />
@@ -65,7 +62,6 @@
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#A6A6A6" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedDisabled" Color="#7A7A7A" />
             <SolidColorBrush x:Key="AppDividerBrush" Color="#333333" />
-            <SolidColorBrush x:Key="AppMaskBrush" Color="#88000000" />
             <SolidColorBrush x:Key="AppBadgeBgBrush" Color="#2B2B2B" />
             <SolidColorBrush x:Key="AppBadgeFgBrush" Color="#FFFFFF" />
 
@@ -76,10 +72,8 @@
             <SolidColorBrush x:Key="CaptureToolbarPrimaryBrush" Color="#F2F2F2" />
             <SolidColorBrush x:Key="CaptureToolbarSecondaryBrush" Color="#A6A6A6" />
 
-            <!-- ScreenLens 强调色（运行时可由 App.ApplyAccent 替换） -->
+            <!-- 截图选区使用固定的 ScreenLens 蓝。 -->
             <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
-            <SolidColorBrush x:Key="ScreenLensAccentHoverBrush" Color="#5CA8FF" />
-            <SolidColorBrush x:Key="ScreenLensAccentPressedBrush" Color="#2B7FE0" />
 
             <!-- 深色禁用态同样保留轨道轮廓，但与可交互开关保持明显区分。 -->
             <SolidColorBrush x:Key="ToggleSwitchFillOffDisabled" Color="#292929" />
@@ -88,12 +82,6 @@
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
-
-    <!-- 预设强调色（外观页演示） -->
-    <SolidColorBrush x:Key="AccentOption1Brush" Color="#3D9BFF" />
-    <SolidColorBrush x:Key="AccentOption2Brush" Color="#7C6FF0" />
-    <SolidColorBrush x:Key="AccentOption3Brush" Color="#4CC38A" />
-    <SolidColorBrush x:Key="AccentOption4Brush" Color="#E5602F" />
 
     <!-- 字号阶梯 -->
     <x:Double x:Key="TextSizePageTitle">28</x:Double>
@@ -180,21 +168,6 @@
         <Setter Property="Foreground" Value="{ThemeResource AppTextPrimaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="LineHeight" Value="22" />
-    </Style>
-
-    <!-- 演示窗口的选区边框（强调色运行时可变） -->
-    <Style x:Key="SelectionBorder" TargetType="Border">
-        <Setter Property="BorderBrush" Value="{ThemeResource ScreenLensAccentBrush}" />
-        <Setter Property="BorderThickness" Value="2" />
-    </Style>
-
-    <!-- ScreenLens 主按钮：跟随强调色（用于确认、翻译、打开演示等主操作） -->
-    <Style x:Key="AppAccentButtonStyle" TargetType="Button">
-        <Setter Property="Background" Value="{ThemeResource ScreenLensAccentBrush}" />
-        <Setter Property="Foreground" Value="#FFFFFF" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="CornerRadius" Value="4" />
-        <Setter Property="Padding" Value="16,8" />
     </Style>
 
 </ResourceDictionary>

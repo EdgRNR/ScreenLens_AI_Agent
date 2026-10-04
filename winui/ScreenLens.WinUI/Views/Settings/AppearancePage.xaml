@@ -11,7 +11,7 @@
     <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="外观" Style="{StaticResource PageTitleText}" />
-        <TextBlock Text="主题与界面密度（原型演示，即时预览）" Style="{StaticResource PageSubtitleText}" />
+        <TextBlock Text="设置主题与界面密度" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="主题" Style="{StaticResource SectionHeaderText}" />
         <controls:SettingCard Icon="&#xE790;" Title="主题模式" Description="与「通用」页设置联动">
@@ -21,40 +21,6 @@
                 <ComboBoxItem Content="深色" />
             </ComboBox>
         </controls:SettingCard>
-
-        <TextBlock Text="强调色" Style="{StaticResource SectionHeaderText}" />
-        <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16">
-            <StackPanel Spacing="12">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <RadioButton x:Name="Accent0" GroupName="Accent" Checked="OnAccentChecked" Tag="0">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption1Brush}" />
-                            <TextBlock Text="ScreenLens 蓝" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="Accent1" GroupName="Accent" Checked="OnAccentChecked" Tag="1">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption2Brush}" />
-                            <TextBlock Text="黛紫" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="Accent2" GroupName="Accent" Checked="OnAccentChecked" Tag="2">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption3Brush}" />
-                            <TextBlock Text="青碧" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="Accent3" GroupName="Accent" Checked="OnAccentChecked" Tag="3">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Border Width="16" Height="16" CornerRadius="3" Background="{StaticResource AccentOption4Brush}" />
-                            <TextBlock Text="熔橙" />
-                        </StackPanel>
-                    </RadioButton>
-                </StackPanel>
-                <TextBlock Style="{StaticResource DemoNoteText}"
-                           Text="强调色即时应用到品牌标识、主按钮与截图选区边框（仅前端演示值）" />
-            </StackPanel>
-        </Border>
 
         <TextBlock Text="密度" Style="{StaticResource SectionHeaderText}" />
         <controls:SettingCard Icon="&#xE71C;" Title="卡片密度" Description="切换后立即改变所有设置页卡片的内边距与高度">
@@ -74,7 +40,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
-            <TextBlock Grid.Column="1" Text="原型提示：本页设置仅保存在内存中，关闭应用后恢复默认。"
+            <TextBlock Grid.Column="1" Text="主题与卡片密度会自动保存，下次启动继续使用。"
                        Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
         </Grid>
 

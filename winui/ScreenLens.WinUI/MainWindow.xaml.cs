@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Windowing;
 using ScreenLens.WinUI.ViewModels;
-using ScreenLens.WinUI.Views.Preview;
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -77,21 +76,17 @@ namespace ScreenLens.WinUI
             RootGrid.Loaded += (_, _) => ApplyTheme(_vm.ThemeMode);
             _vm.ThemeModeChanged += ApplyTheme;
 
-            // 强调色变化即时写入主题字典（品牌区 / 主按钮 / 选区边框）
-            _vm.AccentChanged += App.ApplyAccent;
-
             // 统一的“尚未接入功能”轻提示
             _vm.ToastRequested += ShowToast;
             Closed += (_, _) =>
             {
                 _vm.ThemeModeChanged -= ApplyTheme;
-                _vm.AccentChanged -= App.ApplyAccent;
                 _vm.ToastRequested -= ShowToast;
                 _toastTimer.Stop();
             };
             _toastTimer.Tick += (_, _) => { ToastBar.IsOpen = false; _toastTimer.Stop(); };
 
-            // 初始导航到通用页，并同步记录当前页面类型（供演示入口恢复选中态）
+            // 初始导航到通用页，并记录当前页面类型以避免重复导航。
             _lastPageType = typeof(Views.Settings.GeneralPage);
             ContentFrame.Navigate(_lastPageType);
         }
@@ -105,8 +100,6 @@ namespace ScreenLens.WinUI
             // window has already initialized the shared control resources.
             Nav.RequestedTheme = theme;
             foreach (var item in Nav.MenuItems)
-                if (item is FrameworkElement element) element.RequestedTheme = theme;
-            foreach (var item in Nav.FooterMenuItems)
                 if (item is FrameworkElement element) element.RequestedTheme = theme;
 
             ApplyTitleBarTheme();
@@ -162,21 +155,6 @@ namespace ScreenLens.WinUI
         {
             if (args.SelectedItem is not NavigationViewItem item || item.Tag is not string tag) return;
 
-            if (tag == "CaptureDemo")
-            {
-                // 打开截图选区演示窗口（不改变导航选中态）
-                var demoWindow = new CaptureDemoWindow();
-                App.RegisterWindow(demoWindow);
-                demoWindow.Activate();
-                if (args.SelectedItem is NavigationViewItem footer)
-                {
-                    footer.IsSelected = false;
-                    // 恢复上一个页面选中态
-                    SelectPage(_lastPageType);
-                }
-                return;
-            }
-
             var pageType = tag switch
             {
                 "General" => typeof(Views.Settings.GeneralPage),
@@ -200,31 +178,6 @@ namespace ScreenLens.WinUI
                 verticalOffset: 0,
                 zoomFactor: null,
                 disableAnimation: true));
-        }
-
-        private void SelectPage(Type? pageType)
-        {
-            if (pageType == null) return;
-            var tag = pageType.Name switch
-            {
-                nameof(Views.Settings.GeneralPage) => "General",
-                nameof(Views.Settings.CapturePage) => "Capture",
-                nameof(Views.Settings.OcrPage) => "Ocr",
-                nameof(Views.Settings.TranslatePage) => "Translate",
-                nameof(Views.Settings.HotkeysPage) => "Hotkeys",
-                nameof(Views.Settings.AppearancePage) => "Appearance",
-                nameof(Views.Settings.AboutPage) => "About",
-                _ => "General",
-            };
-
-            foreach (var item in Nav.MenuItems)
-            {
-                if (item is NavigationViewItem nav && nav.Tag as string == tag)
-                {
-                    nav.IsSelected = true;
-                    return;
-                }
-            }
         }
     }
 }

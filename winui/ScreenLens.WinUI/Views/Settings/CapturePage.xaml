@@ -55,10 +55,5 @@
             </StackPanel>
         </Border>
 
-        <TextBlock Text="演示" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE722;" Title="截图选区演示" Description="在模拟桌面上体验选区（不截取真实屏幕）；左右键形状、圈选边框、黑色遮罩与确认行为跟随上方设置">
-            <Button Content="打开演示窗口" Style="{StaticResource AppAccentButtonStyle}" Click="OnOpenDemoClick" />
-        </controls:SettingCard>
-
     </StackPanel>
 </Page>

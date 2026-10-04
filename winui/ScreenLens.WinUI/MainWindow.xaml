@@ -103,14 +103,6 @@
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
-            <NavigationView.FooterMenuItems>
-                <NavigationViewItem Content="打开截图选区演示" Tag="CaptureDemo">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE722;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.FooterMenuItems>
-
             <!-- 右侧内容区：实色表面，可滚动。
                  Frame 宽度钳制到 1000 DIP 并左对齐，使七个设置页的卡片宽度一致。 -->
             <Grid Background="{ThemeResource AppWindowBgBrush}">

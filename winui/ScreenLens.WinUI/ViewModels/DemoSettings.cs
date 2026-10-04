@@ -14,7 +14,7 @@ namespace ScreenLens.WinUI.ViewModels
     /// 数据边界：
     /// - 后端字段（热键 / 翻译服务 / OpenAI 参数）经 SettingsService
     ///   与 Python 配置双向同步，修改自动防抖保存；
-    /// - 前端偏好（主题 / 密度 / 强调色 / 截图交互 / 结果显示）存本地
+    /// - 前端偏好（主题 / 密度 / 截图交互 / 结果显示）存本地
     ///   frontend.json，与 Python 配置完全隔离；
     /// - 加载期间 _suppressPersist 抑制回写。
     /// </summary>
@@ -269,23 +269,6 @@ namespace ScreenLens.WinUI.ViewModels
         }
 
         public event Action<int>? CardDensityChanged;
-
-        private int _accentIndex;
-        public int AccentIndex
-        {
-            get => _accentIndex;
-            set
-            {
-                if (Set(ref _accentIndex, value))
-                {
-                    if (!SuppressPersist) SettingsService.SaveFrontendDebounced(this);
-                    AccentChanged?.Invoke(value);
-                }
-            }
-        }
-
-        /// <summary>强调色变化：由 App.ApplyAccent 应用到主题资源</summary>
-        public event Action<int>? AccentChanged;
 
         // ---------- 快捷键 ----------
 

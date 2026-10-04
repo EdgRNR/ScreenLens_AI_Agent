@@ -110,7 +110,6 @@ namespace ScreenLens.WinUI.Services
                     {
                         vm.ThemeMode = GetInt(prefs, "themeMode", 2);
                         vm.CardDensity = GetInt(prefs, "cardDensity", 0);
-                        vm.AccentIndex = GetInt(prefs, "accentIndex", 0);
                         // The old single captureMode preference is replaced by
                         // independent button mappings with the new defaults.
                         vm.LeftCaptureMode = GetInt(prefs, "leftCaptureMode", 1) == 0 ? 0 : 1;
@@ -280,7 +279,6 @@ namespace ScreenLens.WinUI.Services
                     {
                         ["themeMode"] = vm.ThemeMode,
                         ["cardDensity"] = vm.CardDensity,
-                        ["accentIndex"] = vm.AccentIndex,
                         ["leftCaptureMode"] = vm.LeftCaptureMode,
                         ["rightCaptureMode"] = vm.RightCaptureMode,
                         ["captureDimMaskEnabled"] = vm.CaptureDimMaskEnabled,
