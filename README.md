@@ -245,7 +245,7 @@ ScreenLens_AI_Agent/
 ├── winui/                  # WinUI 3 前端与 Visual Studio 项目
 ├── tests/                  # 自动化测试
 ├── scripts/                # 构建、验收、测量与开发辅助脚本
-├── assets/                 # 应用图标等资源
+├── logo.png                # 品牌 Logo，后台托盘与图标生成共用
 ├── docs/
 │   ├── PLAN.md             # 唯一的项目计划、当前状态与历史计划归档
 │   └── screenshots/        # 当前 WinUI 页面与端到端验收截图

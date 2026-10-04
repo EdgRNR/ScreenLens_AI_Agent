@@ -155,12 +155,7 @@ class HeadlessAgent:
 
     def _start_tray(self) -> None:
         import pystray
-        from PIL import Image
-
-        def _img() -> Image.Image:
-            # 复用现有取景镜头图标绘制（tray.py 与 Tk 无耦合）
-            from screenlens.tray import _make_icon_image
-            return _make_icon_image()
+        from screenlens.tray import _make_icon_image
 
         def _capture(icon, item):
             self._launch_capture()
@@ -184,7 +179,7 @@ class HeadlessAgent:
         )
         try:
             self.tray_icon = pystray.Icon(
-                "ScreenLens", _img(), "ScreenLens", menu)
+                "ScreenLens", _make_icon_image(), "ScreenLens", menu)
             self.tray_icon.run_detached()
             logger.info("托盘已启动（headless）")
         except Exception:

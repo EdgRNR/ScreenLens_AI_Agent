@@ -8,6 +8,8 @@
 2. 用 Visual Studio 打开 `ScreenLens.WinUI.slnx`，选 x64 / Unpackaged 后按 F5。
 3. F5 只启动 WinUI；未启动 Agent 时前端显示未连接状态。这个双进程调试方式是有意设计的。
 
+项目默认采用未打包运行，不需要部署 MSIX。更新代码后若 Visual Studio 仍显示旧的 `Package` 启动项，请重新加载解决方案并选择 `ScreenLens.WinUI (Unpackaged)`。
+
 ## 当前结构
 
 - `App.xaml(.cs)`、`MainWindow.xaml(.cs)`：应用入口与设置主窗口。

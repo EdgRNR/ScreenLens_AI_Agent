@@ -10,7 +10,11 @@
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
-    <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- Agent launches the EXE directly; VS debugging uses the same unpackaged mode. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <AppxPackage>false</AppxPackage>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <EnableMsixTooling>false</EnableMsixTooling>
     <Nullable>enable</Nullable>
     <!-- 未打包部署：目标机器无需安装 Windows App SDK Runtime -->
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>

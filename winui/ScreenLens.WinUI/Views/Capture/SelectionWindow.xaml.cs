@@ -107,6 +107,7 @@ namespace ScreenLens.WinUI.Views.Capture
             InitializeComponent();
             Closed += (_, _) =>
             {
+                _vm.ThemeModeChanged -= ApplyTheme;
                 _presentationClosed.TrySetResult(true);
                 _topmostRetryTimer?.Stop();
                 _topmostRetryTimer = null;
@@ -114,7 +115,8 @@ namespace ScreenLens.WinUI.Views.Capture
             _dimGeometry.Children.Add(_screenGeometry);
             _dimGeometry.Children.Add(_selectionGeometry);
             DimMask.Data = _dimGeometry;
-            Root.RequestedTheme = App.ResolveTheme(_vm.ThemeMode);
+            ApplyTheme(_vm.ThemeMode);
+            _vm.ThemeModeChanged += ApplyTheme;
             App.RegisterCaptureWindow(this);
 
             Title = "ScreenLens 截图";
@@ -146,6 +148,17 @@ namespace ScreenLens.WinUI.Views.Capture
                     ShowCaptureError($"截图界面初始化失败：{ex.Message}");
                 }
             };
+        }
+
+        private void ApplyTheme(int mode)
+        {
+            if (!DispatcherQueue.HasThreadAccess)
+            {
+                DispatcherQueue.TryEnqueue(() => ApplyTheme(mode));
+                return;
+            }
+            if (_presentationClosed.Task.IsCompleted) return;
+            Root.RequestedTheme = App.ResolveTheme(mode);
         }
 
         /// <summary>把命令行预置的物理像素矩形换算为逻辑选区。</summary>

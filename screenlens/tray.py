@@ -5,23 +5,31 @@
 投递到 Tk 主线程，不在回调中直接操作 Tk。
 """
 import logging
+from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 
 def _make_icon_image() -> Image.Image:
-    """绘制一个简洁的"取景镜头"托盘图标。"""
-    size = 64
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    accent = (0, 194, 255, 255)
-    dark = (30, 31, 36, 255)
-    d.ellipse((6, 6, 46, 46), fill=dark, outline=accent, width=4)
-    d.ellipse((20, 20, 32, 32), fill=accent)
-    d.line((42, 42, 58, 58), fill=accent, width=6)
-    return img
+    """从品牌 logo.png 创建托盘图标，兼容源码和 PyInstaller 运行。"""
+    # PyInstaller sets __file__ inside its bundle; logo.png is bundled at
+    # the same root as the screenlens package, independent of the working dir.
+    logo_path = Path(__file__).resolve().parent.parent / "logo.png"
+    with Image.open(logo_path) as source:
+        logo = source.convert("RGBA")
+
+    # Ignore faint alpha noise when trimming the transparent outer margin,
+    # so the actual artwork remains readable at Windows tray icon sizes.
+    bounds = logo.getchannel("A").point(lambda alpha: 255 if alpha > 8 else 0).getbbox()
+    if bounds is None:
+        raise ValueError("logo.png 全透明，无法创建托盘图标")
+    logo = logo.crop(bounds)
+    side = max(logo.size)
+    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    square.alpha_composite(logo, ((side - logo.width) // 2, (side - logo.height) // 2))
+    return square.resize((64, 64), Image.Resampling.LANCZOS)
 
 
 def make_menu(app):

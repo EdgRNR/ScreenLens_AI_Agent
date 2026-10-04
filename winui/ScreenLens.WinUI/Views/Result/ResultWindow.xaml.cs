@@ -28,6 +28,7 @@ namespace ScreenLens.WinUI.Views.Result
         private readonly int _regionH;
         private readonly Views.Capture.SelectionWindow? _owner;
         private bool _translating;
+        private bool _closed;
         private bool? _actionsStacked;
 
         [DllImport("user32.dll")]
@@ -47,7 +48,13 @@ namespace ScreenLens.WinUI.Views.Result
             var elapsed = ocrResp["elapsed_ms"]?.GetValue<int>() ?? 0;
 
             InitializeComponent();
-            Root.RequestedTheme = App.ResolveTheme(_vm.ThemeMode);
+            ApplyTheme(_vm.ThemeMode);
+            _vm.ThemeModeChanged += ApplyTheme;
+            Closed += (_, _) =>
+            {
+                _closed = true;
+                _vm.ThemeModeChanged -= ApplyTheme;
+            };
             App.RegisterResultWindow(this);
 
             Title = "识别结果 — ScreenLens";
@@ -85,6 +92,17 @@ namespace ScreenLens.WinUI.Views.Result
                 UpdateActionLayout();
             };
             Root.SizeChanged += (_, _) => UpdateActionLayout();
+        }
+
+        private void ApplyTheme(int mode)
+        {
+            if (!DispatcherQueue.HasThreadAccess)
+            {
+                DispatcherQueue.TryEnqueue(() => ApplyTheme(mode));
+                return;
+            }
+            if (_closed) return;
+            Root.RequestedTheme = App.ResolveTheme(mode);
         }
 
         private void UpdateActionLayout()

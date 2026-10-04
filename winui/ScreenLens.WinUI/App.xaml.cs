@@ -398,23 +398,19 @@ namespace ScreenLens.WinUI
             if (index < 0 || index >= AccentPalette.Length) return;
             var (accent, hover, pressed) = AccentPalette[index];
 
-            var resources = Current.Resources;
+            // Only inspect our own palette. Accessing XamlControlsResources'
+            // Light dictionary while the app is dark eagerly resolves its
+            // StaticResource aliases against dark colors; later light windows
+            // then retain white control text and dark toggle/button states.
+            var themeResources = Current.Resources.MergedDictionaries.FirstOrDefault(
+                dictionary => dictionary.Source?.OriginalString.EndsWith(
+                    "Styles/ThemeResources.xaml", StringComparison.OrdinalIgnoreCase) == true);
+            if (themeResources is null) return;
+
             foreach (var key in new[] { "Light", "Dark" })
             {
-                ResourceDictionary? dict = null;
-                // 主题字典定义在合并的 ThemeResources.xaml 中，而不是
-                // Application.Resources 根字典；根字典直接索引会让按需截图
-                // 流程在加载设置时抛出“找不到 Light”并中断。
-                foreach (var merged in resources.MergedDictionaries)
-                {
-                    if (merged.ThemeDictionaries.TryGetValue(key, out var theme)
-                        && theme is ResourceDictionary found)
-                    {
-                        dict = found;
-                        break;
-                    }
-                }
-                if (dict is null) continue;
+                if (!themeResources.ThemeDictionaries.TryGetValue(key, out var theme)
+                    || theme is not ResourceDictionary dict) continue;
                 dict["ScreenLensAccentBrush"] = MakeBrush(accent);
                 dict["ScreenLensAccentHoverBrush"] = MakeBrush(hover);
                 dict["ScreenLensAccentPressedBrush"] = MakeBrush(pressed);
