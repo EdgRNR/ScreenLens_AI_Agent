@@ -268,7 +268,10 @@ class HeadlessAgent:
             self._respond(pipe, req_id, data=data,
                           error_code=error_code, message=message)
         except Exception as e:
-            logger.warning("响应写入失败（客户端可能已断开）: %s", e)
+            # Closing the capture window can disconnect before the cancelled
+            # reply is written. That is an expected end to a cancelled request.
+            log = logger.debug if error_code == "cancelled" else logger.warning
+            log("响应写入失败（客户端可能已断开）: %s", e)
 
     def _dispatch(self, pipe, req: dict) -> None:
         if req.get("v") != PROTOCOL_VERSION:
@@ -330,7 +333,7 @@ class HeadlessAgent:
                 result = self.workers.run_translate(text, cfg, target)
             except WorkerError as e:
                 raise IpcError(e.code, e.message) from e
-            self._respond(pipe, req_id, data=result)
+            self._safe_respond(pipe, req_id, data=result)
 
         elif op == "CancelRequest":
             self.workers.cancel_current()
@@ -386,7 +389,7 @@ class HeadlessAgent:
             result = self.workers.run_ocr(png)
         except WorkerError as e:
             raise IpcError(e.code, e.message) from e
-        self._respond(pipe, req_id, data=result)
+        self._safe_respond(pipe, req_id, data=result)
 
 
 def setup_logging() -> None:

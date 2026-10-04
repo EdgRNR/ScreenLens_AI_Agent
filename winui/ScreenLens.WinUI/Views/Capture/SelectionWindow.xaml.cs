@@ -58,6 +58,8 @@ namespace ScreenLens.WinUI.Views.Capture
         private const double MinSize = 8;
 
         private bool _confirmed;
+        private bool _ocrCancelRequested;
+        private bool _ocrRequestStarted;
         private bool _captureDisplayed;
         private readonly TaskCompletionSource<bool> _presentationClosed = new();
         private Task? _firstShowTask;
@@ -788,7 +790,7 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 if (e.Key == Windows.System.VirtualKey.Escape)
                 {
-                    CancelOcr();
+                    _ = CancelOcrAsync();
                 }
                 return;
             }
@@ -1145,6 +1147,7 @@ namespace ScreenLens.WinUI.Views.Capture
                     : null;
                 var png = await _shot.CropToPngAsync(px, py, pw, ph,
                     maskPolygon);
+                if (RecognitionAbandoned) return;
                 if (png is null || png.Length == 0)
                 {
                     throw new BackendException("image_too_large", "选区裁剪失败");
@@ -1169,14 +1172,18 @@ namespace ScreenLens.WinUI.Views.Capture
                 // 截图遮罩先于后台初始化出现。连接/加载配置放在用户确认后，
                 // 这样后台未运行时仍能选择区域，并在识别前得到明确的错误提示。
                 var startupError = await BackendBootstrapper.EnsureRunningAsync();
+                if (RecognitionAbandoned) return;
                 if (startupError is not null)
                     throw new BackendException("agent_unavailable", startupError);
                 var settingsError = await SettingsService.LoadBackendAsync(_vm);
+                if (RecognitionAbandoned) return;
                 if (settingsError is not null)
                     throw new BackendException("agent_unavailable", settingsError);
 
+                _ocrRequestStarted = true;
                 resp = await BackendClient.Instance.CallAsync(
                     "RecognizeImage", null, png, timeoutMs: 90_000);
+                if (RecognitionAbandoned) return;
 
                 // 裁剪已完成：立即释放整幅像素与显示位图（几十 MiB），
                 // 本进程随后只保留结果窗口所需的数据。
@@ -1195,6 +1202,15 @@ namespace ScreenLens.WinUI.Views.Capture
                 // 本窗口在结果窗口显示后关闭（进程由结果窗口维持）
                 Close();
             }
+            catch (Exception) when (RecognitionAbandoned)
+            {
+                // Esc/closing is a normal exit. Never update closed controls
+                // or show a late OCR result/error after the user has cancelled.
+            }
+            catch (BackendException ex) when (ex.Code == "cancelled")
+            {
+                CloseAfterHidingOverlay();
+            }
             catch (BackendException ex)
             {
                 _confirmed = false;
@@ -1209,13 +1225,37 @@ namespace ScreenLens.WinUI.Views.Capture
                 ShowCaptureError($"识别失败：{ex.Message}");
                 SetHintVisibility(Visibility.Visible);
             }
+            finally
+            {
+                _ocrRequestStarted = false;
+            }
         }
 
-        /// <summary>取消进行中的 OCR（Esc 在识别中时触发）。</summary>
-        private void CancelOcr()
+        private bool RecognitionAbandoned => _ocrCancelRequested
+            || _presentationClosed.Task.IsCompleted;
+
+        /// <summary>Esc 取消识别并退出；尚未提交的 OCR 不再发送。</summary>
+        private async Task CancelOcrAsync()
         {
-            _ = BackendClient.Instance.CallAsync("CancelRequest", null,
-                timeoutMs: 3000);
+            if (_ocrCancelRequested) return;
+            _ocrCancelRequested = true;
+            try
+            {
+                // Before submission, the local guard is sufficient. Avoid a
+                // global CancelRequest that might interrupt an unrelated task.
+                if (_ocrRequestStarted)
+                    await BackendClient.Instance.CallAsync("CancelRequest", null,
+                        timeoutMs: 3000);
+            }
+            catch (Exception ex)
+            {
+                App.WriteLifecycleLog($"退出截图时取消请求未完成：{ex.Message}");
+            }
+            finally
+            {
+                if (!_presentationClosed.Task.IsCompleted)
+                    CloseAfterHidingOverlay();
+            }
         }
     }
 }
