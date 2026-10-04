@@ -17,21 +17,6 @@ namespace ScreenLens.WinUI.Views.Settings
         public HotkeysPage()
         {
             InitializeComponent();
-            Loaded += (_, _) => SyncFirstRow();
-            Vm.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(DemoSettings.HotkeyText))
-                {
-                    SyncFirstRow();
-                }
-            };
-        }
-
-        /// <summary>第一条「截图并翻译」绑定到 Vm.HotkeyText 真实值。</summary>
-        private void SyncFirstRow()
-        {
-            Vm.Hotkeys[0].Keys = string.IsNullOrEmpty(Vm.HotkeyText)
-                ? "—" : Vm.HotkeyText;
         }
 
         /// <summary>编辑快捷键：仅 Editable=true 的条目接后端 RegisterHotkey。</summary>

@@ -48,7 +48,15 @@ namespace ScreenLens.WinUI.ViewModels
         public string HotkeyText
         {
             get => _hotkeyText;
-            set => Set(ref _hotkeyText, value);
+            set
+            {
+                if (Set(ref _hotkeyText, value))
+                {
+                    // Keep the display row in the model so pages do not need
+                    // to subscribe to the singleton just to synchronize it.
+                    Hotkeys[0].Keys = string.IsNullOrEmpty(value) ? "—" : value;
+                }
+            }
         }
 
         private int _targetLanguage; // 0=zh 1=en 2=ja

@@ -107,8 +107,12 @@
                  Frame 宽度钳制到 1000 DIP 并左对齐，使七个设置页的卡片宽度一致。 -->
             <Grid Background="{ThemeResource AppWindowBgBrush}">
                 <ScrollViewer x:Name="ContentScroll" HorizontalScrollMode="Disabled">
+                    <!-- Reuse the seven settings pages on demand. Sidebar
+                         switches do not need a growing back/forward journal. -->
                     <Frame
                         x:Name="ContentFrame"
+                        CacheSize="7"
+                        IsNavigationStackEnabled="False"
                         HorizontalAlignment="Left"
                         Width="{Binding ViewportWidth, ElementName=ContentScroll, Converter={StaticResource ClampContentWidth}}" />
                 </ScrollViewer>
