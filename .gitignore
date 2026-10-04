@@ -33,3 +33,4 @@ screenlens.log
 diag*.txt
 *_out.txt
 *_err.txt
+.local/capture-diagnostics/

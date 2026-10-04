@@ -57,6 +57,9 @@ namespace ScreenLens.WinUI.Views.Capture
         private const double MinSize = 8;
 
         private bool _confirmed;
+        private bool _captureDisplayed;
+        private readonly TaskCompletionSource<bool> _presentationClosed = new();
+        private Task? _firstShowTask;
         private DispatcherQueueTimer? _topmostRetryTimer;
         private int _topmostRetryCount;
 
@@ -112,6 +115,7 @@ namespace ScreenLens.WinUI.Views.Capture
             InitializeComponent();
             Closed += (_, _) =>
             {
+                _presentationClosed.TrySetResult(true);
                 _topmostRetryTimer?.Stop();
                 _topmostRetryTimer = null;
             };
@@ -139,9 +143,6 @@ namespace ScreenLens.WinUI.Views.Capture
                     {
                         ApplyPresetRegion(r);
                     }
-                    // Keep the native window transparent until its first XAML
-                    // layout is complete, then reveal the prepared content.
-                    Root.Opacity = 1;
                     EnsureCaptureWindowForeground("Loaded");
                 }
                 catch (Exception ex)
@@ -196,6 +197,9 @@ namespace ScreenLens.WinUI.Views.Capture
 
         internal void EnsureCaptureWindowForeground(string reason)
         {
+            // Repeated hotkeys and Loaded must not show the HWND before its
+            // startup surface has been prepared by ShowForCaptureAsync.
+            if (!_captureDisplayed || _presentationClosed.Task.IsCompleted) return;
             try
             {
                 Activate();
@@ -296,6 +300,7 @@ namespace ScreenLens.WinUI.Views.Capture
                 {
                     await stream.WriteAsync(_shot.Bgra, 0, _shot.Bgra.Length);
                 }
+                wb.Invalidate();
                 ShotImage.Source = wb;
                 App.WriteLifecycleLog("截图选区背景位图已加载");
             }
@@ -308,8 +313,50 @@ namespace ScreenLens.WinUI.Views.Capture
             }
         }
 
-        /// <summary>在首次显示窗口前完成冻结画面加载，避免先闪出黑色空层。</summary>
+        /// <summary>加载冻结位图；实际首帧呈现由 ShowForCaptureAsync 单独等待。</summary>
         internal Task PrepareForDisplayAsync() => LoadShotImageAsync();
+
+        internal Task ShowForCaptureAsync()
+            => _firstShowTask ??= ShowFirstCaptureAsync();
+
+        private async Task ShowFirstCaptureAsync()
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            CaptureWindowPresentation.Cloak(hwnd);
+            var framesReady = new TaskCompletionSource<bool>();
+            var frames = 0;
+            void OnFrame(object? sender, object args)
+            {
+                if (Root.ActualWidth > 0 && Root.ActualHeight > 0 && ++frames >= 2)
+                    framesReady.TrySetResult(true);
+            }
+            CompositionTarget.Rendering += OnFrame;
+            try
+            {
+                Activate();
+                var completed = await Task.WhenAny(framesReady.Task, _presentationClosed.Task,
+                    Task.Delay(TimeSpan.FromSeconds(3)));
+                if (_presentationClosed.Task.IsCompleted) return;
+                if (completed != framesReady.Task)
+                    throw new TimeoutException("截图界面在隐藏准备期间未完成绘制。");
+                // Rendering is not a presentation fence. Wait for the compositor
+                // commit separately, then synchronize pending DWM composition.
+                var commit = Compositor.RequestCommitAsync().AsTask();
+                completed = await Task.WhenAny(commit, _presentationClosed.Task,
+                    Task.Delay(TimeSpan.FromSeconds(3)));
+                if (_presentationClosed.Task.IsCompleted) return;
+                if (completed != commit)
+                    throw new TimeoutException("截图界面的合成提交未完成。");
+                await commit;
+                CaptureWindowPresentation.Reveal(hwnd);
+                _captureDisplayed = true;
+                EnsureCaptureWindowForeground("首帧准备完成");
+            }
+            finally
+            {
+                CompositionTarget.Rendering -= OnFrame;
+            }
+        }
 
         private static void LogCrash(string source, Exception ex)
         {

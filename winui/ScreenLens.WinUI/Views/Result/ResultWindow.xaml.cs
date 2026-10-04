@@ -234,7 +234,18 @@ namespace ScreenLens.WinUI.Views.Result
                 return;
             }
             var sel = new Views.Capture.SelectionWindow(shot);
-            sel.Activate();
+            try
+            {
+                await sel.PrepareForDisplayAsync();
+                await sel.ShowForCaptureAsync();
+            }
+            catch (Exception ex)
+            {
+                sel.Close();
+                AppWindow.Show();
+                ShowStatus($"截图界面启动失败：{ex.Message}", InfoBarSeverity.Error);
+                return;
+            }
             Close(); // 本窗口关闭，进程由新选区窗口维持
         }
 

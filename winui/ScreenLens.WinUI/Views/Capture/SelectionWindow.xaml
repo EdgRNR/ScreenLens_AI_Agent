@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <!-- 截图选区覆盖层：覆盖整个虚拟桌面，支持在任意显示器上选区 -->
-    <Grid x:Name="Root" Background="Black" Opacity="0"
+    <Grid x:Name="Root" Background="Black"
           KeyDown="OnRootKeyDown"
           PointerPressed="OnPointerPressed"
           PointerMoved="OnPointerMoved"
