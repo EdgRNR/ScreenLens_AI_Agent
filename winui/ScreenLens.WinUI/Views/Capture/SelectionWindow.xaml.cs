@@ -65,15 +65,9 @@ namespace ScreenLens.WinUI.Views.Capture
         private Task? _firstShowTask;
         private DispatcherQueueTimer? _topmostRetryTimer;
         private int _topmostRetryCount;
-
-        private const uint SwpNoSize = 0x0001;
-        private const uint SwpNoMove = 0x0002;
-        private const uint SwpNoActivate = 0x0010;
-        private const uint SwpShowWindow = 0x0040;
+        private bool _captureActivationPending;
         private const int SwHide = 0;
         private const int GwHwndPrev = 3;
-        private const int GwlExStyle = -20;
-        private const long WsExTopmost = 0x00000008L;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativePoint { internal int X, Y; }
@@ -83,25 +77,11 @@ namespace ScreenLens.WinUI.Views.Capture
         private static extern bool GetCursorPos(out NativePoint point);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetWindowPos(IntPtr hwnd,
-            IntPtr hwndInsertAfter, int x, int y, int width, int height,
-            uint flags);
-
-        [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool ShowWindow(IntPtr hwnd, int command);
 
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmFlush();
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetForegroundWindow(IntPtr hwnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-        private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
@@ -210,9 +190,10 @@ namespace ScreenLens.WinUI.Views.Capture
         {
             // Repeated hotkeys and Loaded must not show the HWND before its
             // startup surface has been prepared by ShowForCaptureAsync.
-            if (!_captureDisplayed || _presentationClosed.Task.IsCompleted) return;
+            if (!_captureDisplayed || _cancelCloseRequested || _presentationClosed.Task.IsCompleted) return;
             try
             {
+                _captureActivationPending = true;
                 Activate();
                 EnsureCaptureWindowTopmost(reason, requestForeground: true);
                 StartTopmostRetryTimer();
@@ -227,28 +208,24 @@ namespace ScreenLens.WinUI.Views.Capture
         private void EnsureCaptureWindowTopmost(string reason,
             bool requestForeground)
         {
+            if (!_captureDisplayed || _cancelCloseRequested || _presentationClosed.Task.IsCompleted) return;
             try
             {
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                // HWND_TOPMOST is independent of foreground activation. Keep the
-                // screenshot above ordinary apps without repeatedly stealing focus.
-                var positioned = SetWindowPos(hwnd, new IntPtr(-1), 0, 0, 0,
-                    0, SwpNoMove | SwpNoSize | SwpShowWindow | SwpNoActivate);
-                var lastError = positioned ? 0 : Marshal.GetLastWin32Error();
-                var exStyle = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
-                var hasTopmostStyle = (exStyle & WsExTopmost) != 0;
-                var foreground = requestForeground
-                    ? SetForegroundWindow(hwnd)
-                    : false;
-                if (requestForeground)
+                var result = CaptureWindowActivation.Raise(hwnd, requestForeground);
+                if (requestForeground && result.IsForeground)
                     Root.Focus(FocusState.Programmatic);
-                var isForeground = GetForegroundWindow() == hwnd;
+                if (result.IsTopmost && result.IsForeground)
+                    _captureActivationPending = false;
+                var foregroundHwnd = CaptureWindowActivation.GetForegroundWindow();
+                var foregroundTitle = new System.Text.StringBuilder(256);
+                GetWindowText(foregroundHwnd, foregroundTitle, foregroundTitle.Capacity);
                 var above = GetWindow(hwnd, GwHwndPrev);
                 var aboveTitle = new System.Text.StringBuilder(256);
                 if (above != IntPtr.Zero)
                     GetWindowText(above, aboveTitle, aboveTitle.Capacity);
                 App.WriteLifecycleLog(
-                    $"截图层级检查({reason})：setTopmost={positioned}, error={lastError}, topmostStyle={hasTopmostStyle}, above='{aboveTitle}', setForeground={foreground}, isForeground={isForeground}");
+                    $"截图层级检查({reason})：setTopmost={result.Positioned}, error={result.PositionError}, topmostStyle={result.IsTopmost}, above='{aboveTitle}', requestForeground={requestForeground}, isForeground={result.IsForeground}, foreground='{foregroundTitle}', foregroundTopmost={CaptureWindowActivation.IsTopmost(foregroundHwnd)}, inputAttached={result.InputAttached}, attachError={result.AttachError}");
             }
             catch (Exception ex)
             {
@@ -272,7 +249,7 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 _topmostRetryCount++;
                 EnsureCaptureWindowTopmost(
-                    $"显示后重试{_topmostRetryCount}", requestForeground: false);
+                    $"显示后重试{_topmostRetryCount}", requestForeground: _captureActivationPending);
                 if (_topmostRetryCount >= 6)
                 {
                     _topmostRetryTimer?.Stop();
@@ -1103,6 +1080,8 @@ namespace ScreenLens.WinUI.Views.Capture
             if (_cancelCloseRequested)
                 return;
             _cancelCloseRequested = true;
+            _topmostRetryTimer?.Stop();
+            _captureActivationPending = false;
 
             try
             {

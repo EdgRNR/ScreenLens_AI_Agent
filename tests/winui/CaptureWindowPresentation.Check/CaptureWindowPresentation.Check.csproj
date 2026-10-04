@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../../winui/ScreenLens.WinUI/Services/CaptureWindowPresentation.cs" Link="CaptureWindowPresentation.cs" />
+    <Compile Include="../../../winui/ScreenLens.WinUI/Services/CaptureWindowActivation.cs" Link="CaptureWindowActivation.cs" />
   </ItemGroup>
 </Project>
