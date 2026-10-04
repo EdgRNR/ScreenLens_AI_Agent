@@ -42,6 +42,16 @@ namespace ScreenLens.WinUI
         /// </summary>
         public App()
         {
+            // XamlControlsResources contains theme-specific aliases used by
+            // control templates and visual states. Initialize them with the
+            // saved application theme before any capture/result/settings UI.
+            var themeMode = SettingsService.ReadStartupThemeMode();
+            var vm = ViewModels.DemoSettings.Instance;
+            vm.SuppressPersist = true;
+            try { vm.ThemeMode = themeMode; }
+            finally { vm.SuppressPersist = false; }
+            if (themeMode is 1 or 2)
+                RequestedTheme = themeMode == 1 ? ApplicationTheme.Light : ApplicationTheme.Dark;
             InitializeComponent();
             UnhandledException += OnUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;

@@ -74,6 +74,7 @@ namespace ScreenLens.WinUI
             // 默认深色主题，并跟随主题模式即时预览
             RootGrid.ActualThemeChanged += (_, _) => ApplyTitleBarTheme();
             ApplyTheme(_vm.ThemeMode);
+            RootGrid.Loaded += (_, _) => ApplyTheme(_vm.ThemeMode);
             _vm.ThemeModeChanged += ApplyTheme;
 
             // 强调色变化即时写入主题字典（品牌区 / 主按钮 / 选区边框）
@@ -81,6 +82,13 @@ namespace ScreenLens.WinUI
 
             // 统一的“尚未接入功能”轻提示
             _vm.ToastRequested += ShowToast;
+            Closed += (_, _) =>
+            {
+                _vm.ThemeModeChanged -= ApplyTheme;
+                _vm.AccentChanged -= App.ApplyAccent;
+                _vm.ToastRequested -= ShowToast;
+                _toastTimer.Stop();
+            };
             _toastTimer.Tick += (_, _) => { ToastBar.IsOpen = false; _toastTimer.Stop(); };
 
             // 初始导航到通用页，并同步记录当前页面类型（供演示入口恢复选中态）
@@ -90,12 +98,16 @@ namespace ScreenLens.WinUI
 
         private void ApplyTheme(int mode)
         {
-            RootGrid.RequestedTheme = mode switch
-            {
-                1 => ElementTheme.Light,
-                2 => ElementTheme.Dark,
-                _ => ElementTheme.Default,
-            };
+            var theme = App.ResolveTheme(mode);
+            RootGrid.RequestedTheme = theme;
+            // Menu items are created before joining NavigationView's visual
+            // tree. Keep their theme scoped to this window even if another
+            // window has already initialized the shared control resources.
+            Nav.RequestedTheme = theme;
+            foreach (var item in Nav.MenuItems)
+                if (item is FrameworkElement element) element.RequestedTheme = theme;
+            foreach (var item in Nav.FooterMenuItems)
+                if (item is FrameworkElement element) element.RequestedTheme = theme;
 
             ApplyTitleBarTheme();
         }

@@ -32,6 +32,11 @@
             <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="{StaticResource AppTextPrimaryColor}" />
             <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="{StaticResource AppTextSecondaryColor}" />
             <SolidColorBrush x:Key="AppTextTertiaryBrush" Color="{StaticResource AppTextTertiaryColor}" />
+            <!-- NavigationView selection states bypass the item's Foreground. -->
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#1A1A1A" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#1A1A1A" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#5F5F5F" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedDisabled" Color="#8A8A8A" />
             <SolidColorBrush x:Key="AppDividerBrush" Color="{StaticResource AppDividerColor}" />
             <SolidColorBrush x:Key="AppMaskBrush" Color="{StaticResource AppMaskColor}" />
             <SolidColorBrush x:Key="AppBadgeBgBrush" Color="{StaticResource AppBadgeBgColor}" />
@@ -70,6 +75,10 @@
             <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="{StaticResource AppTextPrimaryColor}" />
             <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="{StaticResource AppTextSecondaryColor}" />
             <SolidColorBrush x:Key="AppTextTertiaryBrush" Color="{StaticResource AppTextTertiaryColor}" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#F2F2F2" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#F2F2F2" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#A6A6A6" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedDisabled" Color="#7A7A7A" />
             <SolidColorBrush x:Key="AppDividerBrush" Color="{StaticResource AppDividerColor}" />
             <SolidColorBrush x:Key="AppMaskBrush" Color="{StaticResource AppMaskColor}" />
             <SolidColorBrush x:Key="AppBadgeBgBrush" Color="{StaticResource AppBadgeBgColor}" />

@@ -58,12 +58,14 @@ namespace ScreenLens.WinUI.Controls
             InitializeComponent();
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
+            ActualThemeChanged += (_, _) => ApplyActionTheme();
         }
 
         // ---------- 卡片密度即时生效（舒适 16,14 / 紧凑 12,8） ----------
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            ApplyActionTheme();
             ApplyDensity(DemoSettings.Instance.CardDensity);
             DemoSettings.Instance.CardDensityChanged += ApplyDensity;
         }
@@ -71,6 +73,17 @@ namespace ScreenLens.WinUI.Controls
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             DemoSettings.Instance.CardDensityChanged -= ApplyDensity;
+        }
+
+        private void ApplyActionTheme()
+        {
+            // ActionContent is supplied outside the UserControl's XAML tree.
+            // Give it the card's resolved theme, including ComboBox popup items.
+            if (ActionContent is FrameworkElement action)
+                action.RequestedTheme = ActualTheme;
+            if (ActionContent is ComboBox combo)
+                foreach (var item in combo.Items)
+                    if (item is FrameworkElement element) element.RequestedTheme = ActualTheme;
         }
 
         private void ApplyDensity(int density)

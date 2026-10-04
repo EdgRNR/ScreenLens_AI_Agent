@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Input;
 using ScreenLens.WinUI.Services;
 using ScreenLens.WinUI.ViewModels;
 using System;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
@@ -27,6 +28,10 @@ namespace ScreenLens.WinUI.Views.Result
         private readonly int _regionH;
         private readonly Views.Capture.SelectionWindow? _owner;
         private bool _translating;
+        private bool? _actionsStacked;
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
 
         public ResultWindow(JsonObject ocrResp, int screenX, int screenY,
             int regionW, int regionH,
@@ -70,12 +75,40 @@ namespace ScreenLens.WinUI.Views.Result
                     Glyph = "\uE8C8",
                     FontSize = 14,
                 };
-                CopyBtn.MinWidth = 40;
                 ToolTipService.SetToolTip(CopyBtn, "复制识别文本");
             }
 
             PositionWindow();
-            Root.Loaded += (_, _) => Root.Focus(FocusState.Programmatic);
+            Root.Loaded += (_, _) =>
+            {
+                Root.Focus(FocusState.Programmatic);
+                UpdateActionLayout();
+            };
+            Root.SizeChanged += (_, _) => UpdateActionLayout();
+        }
+
+        private void UpdateActionLayout()
+        {
+            var available = Math.Max(0, Root.ActualWidth - Root.Padding.Left - Root.Padding.Right);
+            if (available == 0) return;
+            var stacked = available < 360;
+            if (_actionsStacked == stacked) return;
+            _actionsStacked = stacked;
+            ActionButtons.ColumnDefinitions.Clear();
+            ActionButtons.RowDefinitions.Clear();
+            for (var i = 0; i < (stacked ? 1 : 3); i++)
+                ActionButtons.ColumnDefinitions.Add(new ColumnDefinition
+                {
+                    Width = new GridLength(1, GridUnitType.Star),
+                });
+            for (var i = 0; i < (stacked ? 3 : 1); i++)
+                ActionButtons.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var buttons = new[] { TranslateBtn, RecaptureBtn, CopyBtn };
+            for (var i = 0; i < buttons.Length; i++)
+            {
+                Grid.SetColumn(buttons[i], stacked ? 0 : i);
+                Grid.SetRow(buttons[i], stacked ? i : 0);
+            }
         }
 
         private static string LinesOf(JsonObject resp)
@@ -88,9 +121,13 @@ namespace ScreenLens.WinUI.Views.Result
 
         private void PositionWindow()
         {
-            const int minW = 420;
-            var w = Math.Clamp(Math.Max(_regionW, minW), minW, 900);
-            var h = 360;
+            // Region coordinates and AppWindow bounds are physical pixels;
+            // minimum content size is expressed in DIPs for high-DPI displays.
+            var dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var scale = dpi > 0 ? dpi / 96.0 : 1.0;
+            var minW = (int)Math.Ceiling(420 * scale);
+            var w = Math.Clamp(Math.Max(_regionW, minW), minW, (int)Math.Ceiling(900 * scale));
+            var h = (int)Math.Ceiling(360 * scale);
 
             int x, y;
             if (_vm.ResultPosition == 2
@@ -132,6 +169,8 @@ namespace ScreenLens.WinUI.Views.Result
                     Microsoft.UI.Windowing.DisplayAreaFallback.Nearest);
             if (da is not null)
             {
+                w = Math.Min(w, da.WorkArea.Width);
+                h = Math.Min(h, da.WorkArea.Height);
                 if (x + w > da.WorkArea.X + da.WorkArea.Width)
                 {
                     x = da.WorkArea.X + da.WorkArea.Width - w;
@@ -195,6 +234,7 @@ namespace ScreenLens.WinUI.Views.Result
             TranslateBtn.IsEnabled = false;
             TranslateBtn.Content = "翻译中…";
             TranslatePanel.Visibility = Visibility.Visible;
+            TranslationRow.Height = new GridLength(1, GridUnitType.Star);
             TranslatedText.Text = "";
             try
             {

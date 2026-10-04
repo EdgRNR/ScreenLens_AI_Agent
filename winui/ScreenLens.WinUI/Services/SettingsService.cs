@@ -77,6 +77,18 @@ namespace ScreenLens.WinUI.Services
 
         // ------------------------------------------------------------ 加载
 
+        /// <summary>在创建 XAML 控件资源之前读取启动主题，避免先按系统主题缓存控件颜色。</summary>
+        internal static int ReadStartupThemeMode()
+        {
+            try
+            {
+                var prefs = JsonNode.Parse(File.ReadAllText(FrontendPrefsPath))?.AsObject();
+                var mode = prefs is null ? 2 : GetInt(prefs, "themeMode", 2);
+                return mode is 0 or 1 or 2 ? mode : 2;
+            }
+            catch { return 2; }
+        }
+
         /// <summary>从后端 + 本地偏好装配设置；后端不可用时保留默认值。</summary>
         /// <returns>错误信息（null = 成功）</returns>
         public static async Task<string?> LoadAsync(DemoSettings vm)

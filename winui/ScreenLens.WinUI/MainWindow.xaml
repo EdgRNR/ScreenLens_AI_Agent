@@ -53,7 +53,17 @@
             IsPaneOpen="True"
             OpenPaneLength="212"
             SelectionChanged="OnNavSelectionChanged"
-            Background="Transparent">
+            Background="Transparent"
+            Foreground="{ThemeResource AppTextPrimaryBrush}">
+
+            <NavigationView.Resources>
+                <Style TargetType="NavigationViewItem">
+                    <Setter Property="Foreground" Value="{ThemeResource AppTextPrimaryBrush}" />
+                </Style>
+                <Style TargetType="FontIcon">
+                    <Setter Property="Foreground" Value="{ThemeResource AppTextPrimaryBrush}" />
+                </Style>
+            </NavigationView.Resources>
 
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="通用" Tag="General" IsSelected="True">

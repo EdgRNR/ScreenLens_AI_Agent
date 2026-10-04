@@ -688,7 +688,6 @@ namespace ScreenLens.WinUI.Views.Capture
             if (_freeformSelection)
             {
                 _freeformPoints.Add(_start);
-                FreeformLine.Visibility = Visibility.Visible;
             }
             _sel = new Rect(_start.X, _start.Y, 0, 0);
             ApplySelection();
@@ -821,6 +820,9 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void ApplySelection()
         {
+            // Render the stroke even when its bounding box is not yet large
+            // enough to confirm. Starting a new stroke clears the old geometry.
+            if (_freeformSelection) UpdateFreeformLine();
             var has = _sel.Width >= MinSize && _sel.Height >= MinSize;
             var vis = has ? Visibility.Visible : Visibility.Collapsed;
             SelBorder.Visibility = _freeformSelection && !_vm.FreeformBorderEnabled
@@ -842,8 +844,6 @@ namespace ScreenLens.WinUI.Views.Capture
                 Root.ActualHeight);
             _selectionGeometry.Rect = new Rect(_sel.X, _sel.Y,
                 _sel.Width, _sel.Height);
-
-            if (_freeformSelection) UpdateFreeformLine();
         }
 
         private void UpdateFreeformBounds()
