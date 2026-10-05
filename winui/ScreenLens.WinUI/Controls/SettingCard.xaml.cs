@@ -29,6 +29,16 @@ namespace ScreenLens.WinUI.Controls
         public static readonly DependencyProperty ActionContentProperty =
             DependencyProperty.Register(nameof(ActionContent), typeof(object), typeof(SettingCard), new PropertyMetadata(null));
 
+        public static readonly DependencyProperty DetailsContentProperty =
+            DependencyProperty.Register(nameof(DetailsContent), typeof(object), typeof(SettingCard), new PropertyMetadata(null));
+
+        /// <summary>卡片内缩进的子设置，继承同一卡片的主题和生命周期。</summary>
+        public object? DetailsContent
+        {
+            get => GetValue(DetailsContentProperty);
+            set => SetValue(DetailsContentProperty, value);
+        }
+
         public string Icon
         {
             get => (string)GetValue(IconProperty);
@@ -58,14 +68,12 @@ namespace ScreenLens.WinUI.Controls
             InitializeComponent();
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
-            ActualThemeChanged += (_, _) => ApplyActionTheme();
         }
 
         // ---------- 卡片密度即时生效（舒适 16,14 / 紧凑 12,8） ----------
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            ApplyActionTheme();
             ApplyDensity(DemoSettings.Instance.CardDensity);
             DemoSettings.Instance.CardDensityChanged += ApplyDensity;
         }
@@ -75,16 +83,9 @@ namespace ScreenLens.WinUI.Controls
             DemoSettings.Instance.CardDensityChanged -= ApplyDensity;
         }
 
-        private void ApplyActionTheme()
-        {
-            // ActionContent is supplied outside the UserControl's XAML tree.
-            // Give it the card's resolved theme, including ComboBox popup items.
-            if (ActionContent is FrameworkElement action)
-                action.RequestedTheme = ActualTheme;
-            if (ActionContent is ComboBox combo)
-                foreach (var item in combo.Items)
-                    if (item is FrameworkElement element) element.RequestedTheme = ActualTheme;
-        }
+        // ContentPresenter 将操作控件和子设置接入当前窗口的视觉树，自动继承主题。
+        // 不在 ActualThemeChanged 中再给后代设置 RequestedTheme：这会干扰正在进行
+        // 的主题传播，造成窗口已切换、后代仍保留上一种主题的状态。
 
         private void ApplyDensity(int density)
         {
@@ -102,5 +103,8 @@ namespace ScreenLens.WinUI.Controls
 
         public Visibility DescToVis(string? description)
             => string.IsNullOrWhiteSpace(description) ? Visibility.Collapsed : Visibility.Visible;
+
+        public Visibility DetailsToVis(object? details)
+            => details is null ? Visibility.Collapsed : Visibility.Visible;
     }
 }

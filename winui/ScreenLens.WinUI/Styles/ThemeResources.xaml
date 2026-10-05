@@ -40,9 +40,9 @@
             <!-- 截图选区使用固定的 ScreenLens 蓝。 -->
             <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
 
-            <!-- 禁用的 ToggleSwitch 仍保留可辨识的轨道，避免浅色卡片上只剩灰色圆点。 -->
-            <SolidColorBrush x:Key="ToggleSwitchFillOffDisabled" Color="#F4F4F4" />
-            <SolidColorBrush x:Key="ToggleSwitchStrokeOffDisabled" Color="#858585" />
+            <!-- WinUI 的禁用轨道通过 ColorAnimation 读取 Color；旋钮则读取 Brush。 -->
+            <Color x:Key="ToggleSwitchFillOffDisabled">#F4F4F4</Color>
+            <Color x:Key="ToggleSwitchStrokeOffDisabled">#858585</Color>
             <SolidColorBrush x:Key="ToggleSwitchKnobFillOffDisabled" Color="#858585" />
         </ResourceDictionary>
 
@@ -76,8 +76,8 @@
             <SolidColorBrush x:Key="ScreenLensAccentBrush" Color="#3D9BFF" />
 
             <!-- 深色禁用态同样保留轨道轮廓，但与可交互开关保持明显区分。 -->
-            <SolidColorBrush x:Key="ToggleSwitchFillOffDisabled" Color="#292929" />
-            <SolidColorBrush x:Key="ToggleSwitchStrokeOffDisabled" Color="#737373" />
+            <Color x:Key="ToggleSwitchFillOffDisabled">#292929</Color>
+            <Color x:Key="ToggleSwitchStrokeOffDisabled">#737373</Color>
             <SolidColorBrush x:Key="ToggleSwitchKnobFillOffDisabled" Color="#737373" />
         </ResourceDictionary>
 

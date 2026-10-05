@@ -39,49 +39,55 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <Grid x:Name="CardGrid" ColumnSpacing="16" RowSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" MaxWidth="360" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+        <StackPanel>
+            <Grid x:Name="CardGrid" ColumnSpacing="16" RowSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" MaxWidth="360" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <FontIcon
-                x:Name="CardIcon"
-                Grid.Row="0"
-                Grid.Column="0"
-                Glyph="{x:Bind Icon, Mode=OneWay}"
-                FontSize="18"
-                Foreground="{ThemeResource AppTextSecondaryBrush}"
-                VerticalAlignment="Center" />
+                <FontIcon
+                    x:Name="CardIcon"
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Glyph="{x:Bind Icon, Mode=OneWay}"
+                    FontSize="18"
+                    Foreground="{ThemeResource AppTextSecondaryBrush}"
+                    VerticalAlignment="Center" />
 
-            <StackPanel
-                x:Name="CardText"
-                Grid.Row="0"
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Spacing="2">
-                <TextBlock Text="{x:Bind Title, Mode=OneWay}" Style="{StaticResource CardTitleText}" TextWrapping="Wrap" />
-                <TextBlock
-                    Text="{x:Bind Description, Mode=OneWay}"
-                    Style="{StaticResource CardDescText}"
-                    TextWrapping="Wrap"
-                    Visibility="{x:Bind DescToVis(Description), Mode=OneWay}" />
-            </StackPanel>
+                <StackPanel
+                    x:Name="CardText"
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Spacing="2">
+                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" Style="{StaticResource CardTitleText}" TextWrapping="Wrap" />
+                    <TextBlock
+                        Text="{x:Bind Description, Mode=OneWay}"
+                        Style="{StaticResource CardDescText}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind DescToVis(Description), Mode=OneWay}" />
+                </StackPanel>
 
-            <!-- 操作控件槽：绑定 ActionContent（ContentProperty 已重定向到该属性，
-                 避免外部子元素覆盖 UserControl.Content 导致整张卡片被替换） -->
-            <ContentPresenter
-                x:Name="ActionHost"
-                Grid.Row="0"
-                Grid.Column="2"
-                VerticalAlignment="Center"
-                HorizontalAlignment="Right"
-                Content="{x:Bind ActionContent, Mode=OneWay}" />
-        </Grid>
+                <!-- 操作控件槽：绑定 ActionContent（ContentProperty 已重定向到该属性，
+                     避免外部子元素覆盖 UserControl.Content 导致整张卡片被替换） -->
+                <ContentPresenter
+                    x:Name="ActionHost"
+                    Grid.Row="0"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Right"
+                    Content="{x:Bind ActionContent, Mode=OneWay}" />
+            </Grid>
+            <ContentPresenter Margin="34,12,0,0"
+                              HorizontalContentAlignment="Stretch"
+                              Content="{x:Bind DetailsContent, Mode=OneWay}"
+                              Visibility="{x:Bind DetailsToVis(DetailsContent), Mode=OneWay}" />
+        </StackPanel>
     </Border>
 </UserControl>

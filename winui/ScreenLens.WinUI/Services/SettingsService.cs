@@ -118,6 +118,7 @@ namespace ScreenLens.WinUI.Services
                         vm.FreeformBorderEnabled = GetBool(prefs, "freeformBorderEnabled", true);
                         vm.FreeformGlowEnabled = GetBool(prefs, "freeformGlowEnabled", true);
                         vm.FreeformGlowWidthPercent = GetDouble(prefs, "freeformGlowWidthPercent", 100);
+                        vm.FreeformGlowDepthEnabled = GetBool(prefs, "freeformGlowDepthEnabled", true);
                         vm.ConfirmOnRelease =
                             GetBool(prefs, "confirmOnRelease", true);
                         vm.ResultPosition = GetInt(prefs, "resultPosition", 0);
@@ -287,6 +288,7 @@ namespace ScreenLens.WinUI.Services
                         ["freeformBorderEnabled"] = vm.FreeformBorderEnabled,
                         ["freeformGlowEnabled"] = vm.FreeformGlowEnabled,
                         ["freeformGlowWidthPercent"] = vm.FreeformGlowWidthPercent,
+                        ["freeformGlowDepthEnabled"] = vm.FreeformGlowDepthEnabled,
                         ["confirmOnRelease"] = vm.ConfirmOnRelease,
                         ["resultPosition"] = vm.ResultPosition,
                         ["fontSize"] = vm.OriginalFontSize,

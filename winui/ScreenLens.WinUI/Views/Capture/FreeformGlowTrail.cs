@@ -146,7 +146,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
             _visible = true;
         }
         _root.IsVisible = true;
-        SetFinishedDepthVisible(!drawing && points.Count >= 4);
+        SetFinishedDepthVisible(_finishedDepthEnabled && !drawing && points.Count >= 4);
         MoveHead(headPosition);
         if (drawing)
         {
@@ -322,7 +322,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
                 => _samples[sample++] = new NativePoint { X = (float)(point.X - originX), Y = (float)(point.Y - originY) };
         }
         if (_rendering) _tip?.Update(displayPoints, _headPosition);
-        else UpdateFinishedDepthGeometry();
+        else if (_finishedDepthEnabled) UpdateFinishedDepthGeometry();
     }
 
     private static Color Lerp(Color a, Color b, double amount)

@@ -10,6 +10,30 @@
     NavigationCacheMode="Enabled">
 
     <StackPanel Style="{StaticResource SettingsPagePanel}">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState>
+                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="900" /></VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GlowWidthAction.(Grid.Row)" Value="0" />
+                        <Setter Target="GlowWidthAction.(Grid.Column)" Value="1" />
+                        <Setter Target="GlowWidthAction.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="GlowDepthAction.(Grid.Row)" Value="0" />
+                        <Setter Target="GlowDepthAction.(Grid.Column)" Value="1" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState>
+                    <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0" /></VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GlowWidthAction.(Grid.Row)" Value="1" />
+                        <Setter Target="GlowWidthAction.(Grid.Column)" Value="0" />
+                        <Setter Target="GlowWidthAction.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="GlowDepthAction.(Grid.Row)" Value="1" />
+                        <Setter Target="GlowDepthAction.(Grid.Column)" Value="0" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
 
         <TextBlock Text="截图与选区" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="设置鼠标选区方式、背景遮罩与确认行为" Style="{StaticResource PageSubtitleText}" />
@@ -33,21 +57,44 @@
             <ToggleSwitch IsOn="{x:Bind Vm.FreeformBorderEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="自由圈选外接矩形边框" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE790;" Title="彩虹圈选光效" Description="沿自由圈选轨迹显示柔和彩虹光带与暖色光头；关闭后显示普通圈选轨迹&#x0A;备注：仅在关闭“自由圈选外接矩形边框”后可开启；打开边框时光效暂停，并保留你的光效偏好。">
+        <controls:SettingCard x:Name="RainbowSettingsCard" Icon="&#xE790;" Title="彩虹圈选" Description="沿自由圈选轨迹显示柔和彩虹光带与暖色光头；关闭后显示普通圈选轨迹&#x0A;仅在关闭“自由圈选外接矩形边框”后可开启，暂停时保留以下偏好。">
             <ToggleSwitch x:Name="FreeformGlowSwitch"
                           IsOn="{x:Bind Vm.FreeformGlowActive, Mode=TwoWay}"
                           IsEnabled="{x:Bind Vm.CanEnableFreeformGlow, Mode=OneWay}"
                           OnContent="" OffContent="" AutomationProperties.Name="彩虹圈选光效" />
-        </controls:SettingCard>
-
-        <controls:SettingCard Icon="&#xE790;" Title="彩虹圈选宽度" Description="默认 100%，可调节为 50%–200%；仅影响彩虹光效，圈选完成后显示柔和光晕与轻微阴影">
-            <StackPanel Orientation="Horizontal" Spacing="12">
-                <Slider x:Name="FreeformGlowWidthSlider" Width="180" Minimum="50" Maximum="200" StepFrequency="10"
-                        IsEnabled="{x:Bind Vm.FreeformGlowActive, Mode=OneWay}"
-                        Value="{x:Bind Vm.FreeformGlowWidthPercent, Mode=TwoWay}"
-                        AutomationProperties.Name="彩虹圈选宽度百分比" />
-                <TextBlock Text="{x:Bind Vm.FreeformGlowWidthLabel, Mode=OneWay}" MinWidth="42" VerticalAlignment="Center" />
-            </StackPanel>
+            <controls:SettingCard.DetailsContent>
+                <StackPanel Spacing="16">
+                    <Border Height="1" Background="{ThemeResource AppDividerBrush}" />
+                    <Grid ColumnSpacing="16" RowSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="轨迹宽度" Style="{StaticResource CardTitleText}" />
+                            <TextBlock Text="默认 100%，可调节为 50%–200%" Style="{StaticResource CardDescText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel x:Name="GlowWidthAction" Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <Slider x:Name="FreeformGlowWidthSlider" Width="180" Minimum="50" Maximum="200" StepFrequency="10"
+                                    IsEnabled="{x:Bind Vm.FreeformGlowActive, Mode=OneWay}"
+                                    Value="{x:Bind Vm.FreeformGlowWidthPercent, Mode=TwoWay}"
+                                    AutomationProperties.Name="彩虹圈选宽度百分比" />
+                            <TextBlock Text="{x:Bind Vm.FreeformGlowWidthLabel, Mode=OneWay}" MinWidth="42" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                    <Border Height="1" Background="{ThemeResource AppDividerBrush}" />
+                    <Grid ColumnSpacing="16" RowSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="完成后光晕与阴影" Style="{StaticResource CardTitleText}" />
+                            <TextBlock Text="松开鼠标后渐入柔和光晕、轻微阴影与细亮边；关闭后保留彩虹轨迹" Style="{StaticResource CardDescText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="GlowDepthAction" Grid.Column="1" VerticalAlignment="Center"
+                                      IsOn="{x:Bind Vm.FreeformGlowDepthEnabled, Mode=TwoWay}"
+                                      IsEnabled="{x:Bind Vm.FreeformGlowActive, Mode=OneWay}"
+                                      OnContent="" OffContent="" AutomationProperties.Name="彩虹圈选完成后光晕与阴影" />
+                    </Grid>
+                </StackPanel>
+            </controls:SettingCard.DetailsContent>
         </controls:SettingCard>
 
         <controls:SettingCard Icon="&#xE790;" Title="选区背景黑色遮罩" Description="开启后压暗选区外的画面；关闭后保持截图原始亮度">

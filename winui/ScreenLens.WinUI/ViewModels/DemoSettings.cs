@@ -249,6 +249,18 @@ namespace ScreenLens.WinUI.ViewModels
 
         public string FreeformGlowWidthLabel => $"{FreeformGlowWidthPercent:0}%";
 
+        private bool _freeformGlowDepthEnabled = true;
+        /// <summary>仅控制圈选完成后的额外光晕、阴影和亮边。</summary>
+        public bool FreeformGlowDepthEnabled
+        {
+            get => _freeformGlowDepthEnabled;
+            set
+            {
+                if (Set(ref _freeformGlowDepthEnabled, value) && !SuppressPersist)
+                    SettingsService.SaveFrontendDebounced(this);
+            }
+        }
+
         /// <summary>开启：松开鼠标显示确认工具条；关闭：松开鼠标直接开始识别</summary>
         private bool _confirmOnRelease = true;
         public bool ConfirmOnRelease

@@ -29,6 +29,18 @@ internal sealed partial class FreeformGlowTrail
     private Visual? _highlightVisual;
     private ScalarKeyFrameAnimation? _depthReveal;
     private bool _finishedDepthVisible;
+    private bool _finishedDepthEnabled = true;
+
+    internal void SetFinishedDepthEnabled(bool enabled)
+    {
+        if (_disposed || _finishedDepthEnabled == enabled) return;
+        _finishedDepthEnabled = enabled;
+        if (!enabled)
+        {
+            SetFinishedDepthVisible(false);
+            ClearFinishedDepthGeometry();
+        }
+    }
 
     // WinUI geometries have one parent. Reuse the fitted samples in a fixed set
     // of path buffers, updating these layers only after drawing has finished.

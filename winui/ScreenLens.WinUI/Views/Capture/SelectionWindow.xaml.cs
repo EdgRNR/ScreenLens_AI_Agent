@@ -893,6 +893,7 @@ namespace ScreenLens.WinUI.Views.Capture
                             _freeformGlow.Failed += OnFreeformGlowFailed;
                         }
                         _freeformGlow.SetWidth(_vm.FreeformGlowWidthPercent / 100);
+                        _freeformGlow.SetFinishedDepthEnabled(_vm.FreeformGlowDepthEnabled);
                         _freeformGlow.Update(_freeformPoints, _dragging, _lastPointerPosition);
                     }
                     else _freeformGlow?.Clear();
