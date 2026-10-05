@@ -46,6 +46,8 @@ namespace ScreenLens.WinUI.Views.Capture
         private Point _lastPointerPosition;
         private Rect _sel;
         private readonly List<Point> _freeformPoints = new();
+        private FreeformGlowTrail? _freeformGlow;
+        private bool _freeformGlowUnavailable;
         private readonly List<Border> _hintBars = new();
         private Windows.Graphics.RectInt32? _selectionMonitor;
         private Windows.Graphics.RectInt32? _feedbackMonitor;
@@ -108,6 +110,8 @@ namespace ScreenLens.WinUI.Views.Capture
             Closed += (_, _) =>
             {
                 _vm.ThemeModeChanged -= ApplyTheme;
+                _freeformGlow?.Dispose();
+                _freeformGlow = null;
                 _presentationClosed.TrySetResult(true);
                 _topmostRetryTimer?.Stop();
                 _topmostRetryTimer = null;
@@ -687,6 +691,7 @@ namespace ScreenLens.WinUI.Views.Capture
             _freeformSelection = (_selectionUsesRightButton
                 ? _vm.RightCaptureMode : _vm.LeftCaptureMode) == 1;
             FreeformLine.Visibility = Visibility.Collapsed;
+            _freeformGlow?.Clear();
             _dragging = true;
             _toolbarManuallyPositioned = false;
             _start = p.Position;
@@ -714,6 +719,7 @@ namespace ScreenLens.WinUI.Views.Capture
             _lastPointerPosition = p.Position;
             if (_freeformSelection)
             {
+                _freeformGlow?.MoveHead(p.Position);
                 var last = _freeformPoints[^1];
                 var dx = p.Position.X - last.X;
                 var dy = p.Position.Y - last.Y;
@@ -836,6 +842,7 @@ namespace ScreenLens.WinUI.Views.Capture
             // Render the stroke even when its bounding box is not yet large
             // enough to confirm. Starting a new stroke clears the old geometry.
             if (_freeformSelection) UpdateFreeformLine();
+            else _freeformGlow?.Clear();
             var has = _sel.Width >= MinSize && _sel.Height >= MinSize;
             var vis = has ? Visibility.Visible : Visibility.Collapsed;
             SelBorder.Visibility = _freeformSelection && !_vm.FreeformBorderEnabled
@@ -872,11 +879,44 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void UpdateFreeformLine()
         {
+            if (_vm.FreeformGlowActive && !_freeformGlowUnavailable)
+            {
+                try
+                {
+                    if (_freeformPoints.Count > 0)
+                    {
+                        if (_freeformGlow is null)
+                        {
+                            _freeformGlow = new FreeformGlowTrail(FreeformGlowHost);
+                            _freeformGlow.Failed += OnFreeformGlowFailed;
+                        }
+                        _freeformGlow.Update(_freeformPoints, _dragging, _lastPointerPosition);
+                    }
+                    else _freeformGlow?.Clear();
+                    FreeformLine.Visibility = Visibility.Collapsed;
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    OnFreeformGlowFailed(ex);
+                    return;
+                }
+            }
+            _freeformGlow?.Clear();
             var points = new PointCollection();
             foreach (var point in _freeformPoints) points.Add(point);
             FreeformLine.Points = points;
             FreeformLine.Visibility = _freeformPoints.Count >= 2
                 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnFreeformGlowFailed(Exception ex)
+        {
+            _freeformGlowUnavailable = true;
+            _freeformGlow?.Dispose();
+            _freeformGlow = null;
+            App.WriteLifecycleLog($"圈选光效不可用，使用普通轨迹：{ex.Message}");
+            UpdateFreeformLine();
         }
 
         private void SyncDimensionInputs()
@@ -1147,6 +1187,7 @@ namespace ScreenLens.WinUI.Views.Capture
         {
             if (_confirmed) return;
             _confirmed = true;
+            _freeformGlow?.Freeze();
             HideToolbar();
             HideCaptureError();
             _feedbackMonitor = ResolveFeedbackMonitor();

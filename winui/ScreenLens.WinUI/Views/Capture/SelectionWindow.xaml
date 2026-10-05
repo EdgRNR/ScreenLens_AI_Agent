@@ -31,6 +31,9 @@
                   IsHitTestVisible="False"
                   Visibility="Collapsed" />
 
+        <!-- The glow is a bounded vector composition layer, not a full-screen bitmap. -->
+        <Canvas x:Name="FreeformGlowHost" IsHitTestVisible="False" />
+
         <!-- 每台显示器各自显示一份提示，避免提示条横跨屏幕接缝。 -->
         <Canvas x:Name="HintCanvas" IsHitTestVisible="False" />
 

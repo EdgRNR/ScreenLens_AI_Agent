@@ -33,6 +33,13 @@
             <ToggleSwitch IsOn="{x:Bind Vm.FreeformBorderEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="自由圈选外接矩形边框" />
         </controls:SettingCard>
 
+        <controls:SettingCard Icon="&#xE790;" Title="彩虹圈选光效" Description="沿自由圈选轨迹显示柔和彩虹光带与暖色光头；关闭后显示普通圈选轨迹&#x0A;备注：仅在关闭“自由圈选外接矩形边框”后可开启；打开边框时光效暂停，并保留你的光效偏好。">
+            <ToggleSwitch x:Name="FreeformGlowSwitch"
+                          IsOn="{x:Bind Vm.FreeformGlowActive, Mode=TwoWay}"
+                          IsEnabled="{x:Bind Vm.CanEnableFreeformGlow, Mode=OneWay}"
+                          OnContent="" OffContent="" AutomationProperties.Name="彩虹圈选光效" />
+        </controls:SettingCard>
+
         <controls:SettingCard Icon="&#xE790;" Title="选区背景黑色遮罩" Description="开启后压暗选区外的画面；关闭后保持截图原始亮度">
             <ToggleSwitch IsOn="{x:Bind Vm.CaptureDimMaskEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="选区背景黑色遮罩" />
         </controls:SettingCard>

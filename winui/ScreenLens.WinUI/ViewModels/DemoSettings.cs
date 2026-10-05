@@ -198,9 +198,37 @@ namespace ScreenLens.WinUI.ViewModels
             get => _freeformBorderEnabled;
             set
             {
-                if (Set(ref _freeformBorderEnabled, value) && !SuppressPersist)
-                    SettingsService.SaveFrontendDebounced(this);
+                if (Set(ref _freeformBorderEnabled, value))
+                {
+                    Raise(nameof(CanEnableFreeformGlow));
+                    Raise(nameof(FreeformGlowActive));
+                    if (!SuppressPersist) SettingsService.SaveFrontendDebounced(this);
+                }
             }
+        }
+
+        /// <summary>保留光效偏好；开启外接边框时仅暂停光效。</summary>
+        private bool _freeformGlowEnabled = true;
+        public bool FreeformGlowEnabled
+        {
+            get => _freeformGlowEnabled;
+            set
+            {
+                if (Set(ref _freeformGlowEnabled, value))
+                {
+                    Raise(nameof(FreeformGlowActive));
+                    if (!SuppressPersist) SettingsService.SaveFrontendDebounced(this);
+                }
+            }
+        }
+
+        public bool CanEnableFreeformGlow => !FreeformBorderEnabled;
+
+        /// <summary>设置开关显示实际可用状态，禁用时不覆盖保存的偏好。</summary>
+        public bool FreeformGlowActive
+        {
+            get => CanEnableFreeformGlow && FreeformGlowEnabled;
+            set { if (CanEnableFreeformGlow) FreeformGlowEnabled = value; }
         }
 
         /// <summary>开启：松开鼠标显示确认工具条；关闭：松开鼠标直接开始识别</summary>

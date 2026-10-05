@@ -116,6 +116,7 @@ namespace ScreenLens.WinUI.Services
                         vm.RightCaptureMode = GetInt(prefs, "rightCaptureMode", 0) == 1 ? 1 : 0;
                         vm.CaptureDimMaskEnabled = GetBool(prefs, "captureDimMaskEnabled", true);
                         vm.FreeformBorderEnabled = GetBool(prefs, "freeformBorderEnabled", true);
+                        vm.FreeformGlowEnabled = GetBool(prefs, "freeformGlowEnabled", true);
                         vm.ConfirmOnRelease =
                             GetBool(prefs, "confirmOnRelease", true);
                         vm.ResultPosition = GetInt(prefs, "resultPosition", 0);
@@ -283,6 +284,7 @@ namespace ScreenLens.WinUI.Services
                         ["rightCaptureMode"] = vm.RightCaptureMode,
                         ["captureDimMaskEnabled"] = vm.CaptureDimMaskEnabled,
                         ["freeformBorderEnabled"] = vm.FreeformBorderEnabled,
+                        ["freeformGlowEnabled"] = vm.FreeformGlowEnabled,
                         ["confirmOnRelease"] = vm.ConfirmOnRelease,
                         ["resultPosition"] = vm.ResultPosition,
                         ["fontSize"] = vm.OriginalFontSize,
