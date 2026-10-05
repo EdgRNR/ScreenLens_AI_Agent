@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace ScreenLens.WinUI.Services
@@ -9,6 +10,39 @@ namespace ScreenLens.WinUI.Services
     {
         private const int DwmwaCloak = 13;
         private const int DwmwaCloaked = 14;
+
+        internal static void ConfigureBorderless(IntPtr hwnd)
+        {
+            // Presenter settings alone can retain a native frame/client inset.
+            // Use a popup surface with no resize, dialog, or extended edge.
+            const int styleIndex = -16, exStyleIndex = -20;
+            const int captionAndFrame = 0x00C00000 | 0x00040000;
+            const int popup = unchecked((int)0x80000000);
+            const int extendedEdges = 0x00000100 | 0x00000200 | 0x00020000;
+            SetStyle(hwnd, styleIndex, (GetWindowLong(hwnd, styleIndex) & ~captionAndFrame) | popup);
+            SetStyle(hwnd, exStyleIndex, GetWindowLong(hwnd, exStyleIndex) & ~extendedEdges);
+
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+            {
+                // Windows 11 can draw a one-pixel border even on a captionless
+                // window. Disable it and rounding explicitly for the overlay.
+                var noRounding = 1; // DWMWCP_DONOTROUND
+                Marshal.ThrowExceptionForHR(DwmSetWindowAttribute(hwnd, 33, ref noRounding, sizeof(int)));
+                var noBorder = -2; // DWMWA_COLOR_NONE
+                Marshal.ThrowExceptionForHR(DwmSetWindowAttribute(hwnd, 34, ref noBorder, sizeof(int)));
+            }
+            // Recalculate the non-client area without moving, resizing,
+            // showing, activating, or changing the window's z-order.
+            if (!SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0037))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        private static void SetStyle(IntPtr hwnd, int index, int style)
+        {
+            Marshal.SetLastPInvokeError(0);
+            if (SetWindowLong(hwnd, index, style) == 0 && Marshal.GetLastWin32Error() != 0)
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
 
         internal static void Cloak(IntPtr hwnd) => SetCloaked(hwnd, true);
 
@@ -50,5 +84,13 @@ namespace ScreenLens.WinUI.Services
         private static extern int DwmFlush();
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hwnd, int command);
+        // Styles are 32-bit values on both x86 and x64, unlike HWND pointers.
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hwnd, int index);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter,
+            int x, int y, int width, int height, uint flags);
     }
 }

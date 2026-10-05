@@ -206,6 +206,8 @@ namespace ScreenLens.WinUI.Views.Capture
                 p.IsMinimizable = false;
                 p.IsAlwaysOnTop = true;
             }
+            CaptureWindowPresentation.ConfigureBorderless(
+                WinRT.Interop.WindowNative.GetWindowHandle(this));
         }
 
         internal void EnsureCaptureWindowForeground(string reason)
