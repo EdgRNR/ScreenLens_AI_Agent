@@ -7,8 +7,12 @@ using Microsoft.UI.Xaml.Input;
 using ScreenLens.WinUI.Services;
 using ScreenLens.WinUI.ViewModels;
 using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
 
@@ -31,6 +35,13 @@ namespace ScreenLens.WinUI.Views.Result
         private readonly int _regionH;
         private readonly Views.Capture.SelectionWindow? _owner;
         private bool _translating;
+        private CancellationTokenSource? _translationCancellation;
+        private Task? _translationTask;
+        private readonly DispatcherTimer _translationRefresh = new() { Interval = TimeSpan.FromMilliseconds(50) };
+        private readonly StringBuilder _translationText = new();
+        private bool _translationDirty;
+        private bool _closeRequested;
+        private bool _allowClose;
         private bool _closed;
         private bool _recapturing;
         private bool? _actionsStacked;
@@ -56,9 +67,16 @@ namespace ScreenLens.WinUI.Views.Result
             InitializeComponent();
             ApplyTheme(_vm.ThemeMode);
             _vm.ThemeModeChanged += ApplyTheme;
+            _vm.PropertyChanged += OnSettingsChanged;
+            _translationRefresh.Tick += (_, _) => FlushTranslation();
+            AppWindow.Closing += OnAppWindowClosing;
             Closed += (_, _) =>
             {
                 _closed = true;
+                _translationCancellation?.Cancel();
+                _translationRefresh.Stop();
+                _vm.PropertyChanged -= OnSettingsChanged;
+                AppWindow.Closing -= OnAppWindowClosing;
                 _vm.ThemeModeChanged -= ApplyTheme;
                 AppWindow.Changed -= OnAppWindowChanged;
             };
@@ -300,7 +318,46 @@ namespace ScreenLens.WinUI.Views.Result
                 presenter.Maximize();
         }
 
-        private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+        private async void OnCloseClick(object sender, RoutedEventArgs e) => await CloseResultAsync();
+
+        private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(DemoSettings.Provider) && !_translating && !_closed)
+            {
+                TranslateBtn.IsEnabled = _vm.Provider != 2;
+                TranslateBtn.Content = _vm.Provider == 2 ? "翻译已关闭" : "翻译";
+            }
+        }
+
+        private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+        {
+            if (_allowClose || !_translating) return;
+            args.Cancel = true;
+            _ = CloseResultAsync();
+        }
+
+        private async Task CancelTranslationAsync()
+        {
+            _translationCancellation?.Cancel();
+            if (_translationTask is { } task) await task;
+        }
+
+        private async Task CloseResultAsync()
+        {
+            if (_closed || _closeRequested) return;
+            _closeRequested = true;
+            await CancelTranslationAsync();
+            if (_closed) return;
+            _allowClose = true;
+            Close();
+        }
+
+        private void FlushTranslation()
+        {
+            if (_closed || !_translationDirty) return;
+            _translationDirty = false;
+            TranslatedText.Text = _translationText.ToString();
+        }
 
         private void OnCopyClick(object sender, RoutedEventArgs e)
         {
@@ -327,42 +384,79 @@ namespace ScreenLens.WinUI.Views.Result
 
         private async void OnTranslateClick(object sender, RoutedEventArgs e)
         {
-            if (_translating || _vm.Provider == 2) return;
+            if (_closed || _recapturing || _closeRequested) return;
+            if (_translating) { await CancelTranslationAsync(); return; }
+            if (_vm.Provider == 2) return;
             if (string.IsNullOrEmpty(_ocrText))
             {
                 ShowStatus("没有可翻译的文本", InfoBarSeverity.Warning);
                 return;
             }
 
+            _translationTask = TranslateAsync();
+            await _translationTask;
+            _translationTask = null;
+        }
+
+        private async Task TranslateAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            _translationCancellation = cancellation;
             _translating = true;
-            TranslateBtn.IsEnabled = false;
-            TranslateBtn.Content = "翻译中…";
+            TranslateBtn.Content = "停止翻译";
             TranslatePanel.Visibility = Visibility.Visible;
             TranslationRow.Height = new GridLength(1, GridUnitType.Star);
             TranslatedText.Text = "";
+            _translationText.Clear();
+            _translationRefresh.Start();
+            ShowStatus("正在翻译…", InfoBarSeverity.Informational);
+            var completed = false;
             try
             {
                 var resp = await BackendClient.Instance.CallAsync(
                     "TranslateText",
-                    new JsonObject { ["text"] = _ocrText },
-                    timeoutMs: 45_000);
+                    new JsonObject { ["text"] = _ocrText, ["stream"] = true,
+                        ["request_token"] = Guid.NewGuid().ToString("N") },
+                    timeoutMs: 85_000, ct: cancellation.Token, onDelta: text =>
+                    {
+                        if (_closed || cancellation.IsCancellationRequested) return;
+                        if (_translationText.Length + text.Length > 1_000_000)
+                            throw new BackendException("response_too_large", "译文超过大小限制");
+                        _translationText.Append(text);
+                        _translationDirty = true;
+                    });
+                if (_closed) return;
                 var text = resp["text"]?.GetValue<string>() ?? "";
                 TranslatedText.Text = text;
+                completed = true;
                 ShowStatus(null, InfoBarSeverity.Informational);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!_closed && !_closeRequested && !_recapturing)
+                    ShowStatus("翻译已停止，已保留收到的内容。", InfoBarSeverity.Informational);
             }
             catch (BackendException ex)
             {
-                ShowStatus(ex.Message, InfoBarSeverity.Error);
+                if (!_closed) ShowStatus(ex.Message, InfoBarSeverity.Error);
             }
             catch (Exception ex)
             {
-                ShowStatus($"翻译失败：{ex.Message}", InfoBarSeverity.Error);
+                if (!_closed) ShowStatus($"翻译失败：{ex.Message}", InfoBarSeverity.Error);
             }
             finally
             {
                 _translating = false;
-                TranslateBtn.IsEnabled = true;
-                TranslateBtn.Content = "重新翻译";
+                _translationCancellation = null;
+                _translationRefresh.Stop();
+                // On success the final response is authoritative (including whitespace).
+                if (!completed) FlushTranslation();
+                else _translationDirty = false;
+                if (!_closed)
+                {
+                    TranslateBtn.IsEnabled = _vm.Provider != 2;
+                    TranslateBtn.Content = _vm.Provider == 2 ? "翻译已关闭" : "重新翻译";
+                }
             }
         }
 
@@ -375,6 +469,8 @@ namespace ScreenLens.WinUI.Views.Result
             Views.Capture.SelectionWindow? sel = null;
             try
             {
+                await CancelTranslationAsync();
+                if (_closed) return;
                 CaptureWindowPresentation.HideBeforeCapture(hwnd);
                 var shot = await ScreenCapture.CaptureAsync();
                 if (shot is null)
@@ -415,11 +511,12 @@ namespace ScreenLens.WinUI.Views.Result
             }
         }
 
-        private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
+        private async void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key == Windows.System.VirtualKey.Escape)
             {
-                Close();
+                e.Handled = true;
+                await CloseResultAsync();
             }
         }
 

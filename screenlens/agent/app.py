@@ -244,11 +244,13 @@ class HeadlessAgent:
 
     def _respond(self, pipe, req_id: int, *, data: dict | None = None,
                  error_code: str | None = None,
-                 message: str | None = None) -> None:
+                 message: str | None = None, event: str | None = None) -> None:
         resp = {"v": PROTOCOL_VERSION, "id": req_id,
                 "ok": error_code is None}
         if error_code is None:
             resp["data"] = data or {}
+            if event:
+                resp["event"] = event
         else:
             resp["error"] = {"code": error_code,
                              "message": message or error_code}
@@ -275,6 +277,10 @@ class HeadlessAgent:
         op = req.get("op")
         data = req.get("data") or {}
         req_id = req.get("id", -1)
+        request_token = data.get("request_token")
+        if request_token is not None and (not isinstance(request_token, str)
+                                          or not request_token or len(request_token) > 128):
+            raise IpcError("bad_request", "任务标识格式不正确")
 
         if op == "Ping":
             self._respond(pipe, req_id, data={"pong": True})
@@ -325,13 +331,38 @@ class HeadlessAgent:
             target = data.get("target_language") or \
                 cfg.get("target_language", "zh")
             try:
-                result = self.workers.run_translate(text, cfg, target)
+                if data.get("stream"):
+                    def delta(chunk):
+                        try:
+                            self._respond(pipe, req_id, data={"text": chunk}, event="delta")
+                        except (OSError, ValueError) as e:
+                            raise WorkerError("cancelled", "任务已取消") from e
+                    result = self.workers.run_translate(text, cfg, target, on_delta=delta,
+                                                       request_key=data.get("request_token"))
+                else:
+                    result = self.workers.run_translate(text, cfg, target)
+            except WorkerError as e:
+                raise IpcError(e.code, e.message) from e
+            self._safe_respond(pipe, req_id, data=result)
+
+        elif op in ("ListTranslationModels", "TestTranslationConnection"):
+            oa = data.get("openai")
+            if not isinstance(oa, dict) or not all(isinstance(oa.get(k, ""), str)
+                                                 for k in ("base_url", "api_key", "model")):
+                raise IpcError("bad_request", "API 参数格式不正确")
+            try:
+                result = self.workers.translation_setup(
+                    "models" if op == "ListTranslationModels" else "test_translation", data,
+                    request_key=data.get("request_token"))
             except WorkerError as e:
                 raise IpcError(e.code, e.message) from e
             self._safe_respond(pipe, req_id, data=result)
 
         elif op == "CancelRequest":
-            self.workers.cancel_current()
+            if data.get("request_token"):
+                self.workers.cancel_current(data["request_token"])
+            else:
+                self.workers.cancel_current()
             self._respond(pipe, req_id, data={})
 
         elif op == "Shutdown":

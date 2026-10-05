@@ -35,6 +35,9 @@
 - RegisterHotkey  -> {}                         冲突回 hotkey_conflict（保留原热键）
 - RecognizeImage  -> {text, lines:[{text,score,box}], elapsed_ms}
 - TranslateText   -> {text}
+- TranslateText(stream=true) -> event:delta {text} 帧，最后为正常成功/失败响应
+- ListTranslationModels -> {models:[id]}       使用草稿参数，不保存
+- TestTranslationConnection -> {text}          使用草稿进行短句翻译，不保存
 - CancelRequest   -> {}                         取消进行中的识别/翻译
 - Shutdown        -> {}                         停止代理（托盘退出等）
 
@@ -129,7 +132,8 @@ def make_response(req_id: int, *, data: dict | None = None,
 # 常量集合（供两端引用）
 OPS = (
     "Ping", "GetStatus", "GetSettings", "SaveSettings", "RegisterHotkey",
-    "RecognizeImage", "TranslateText", "CancelRequest", "Shutdown",
+    "RecognizeImage", "TranslateText", "ListTranslationModels",
+    "TestTranslationConnection", "CancelRequest", "Shutdown",
 )
 
 ERROR_CODES = (

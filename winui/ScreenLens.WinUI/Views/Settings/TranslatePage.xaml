@@ -7,7 +7,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    NavigationCacheMode="Enabled">
+    NavigationCacheMode="Enabled" PointerPressed="OnPagePointerPressed">
 
     <StackPanel Style="{StaticResource SettingsPagePanel}">
 
@@ -25,7 +25,7 @@
 
         <TextBlock Text="服务商" Style="{StaticResource SectionHeaderText}" />
         <controls:SettingCard Icon="&#xE703;" Title="翻译服务" Description="Google 免费无需 API Key；OpenAI 兼容支持多家服务商；关闭后截图仅识别不翻译">
-            <ComboBox SelectedIndex="{x:Bind Vm.Provider, Mode=TwoWay}" MinWidth="180">
+            <ComboBox x:Name="ProviderCombo" SelectedIndex="{x:Bind Draft.Provider, Mode=TwoWay}" MinWidth="180">
                 <ComboBoxItem Content="Google 免费" />
                 <ComboBoxItem Content="OpenAI 兼容" />
                 <ComboBoxItem Content="关闭翻译" />
@@ -34,8 +34,9 @@
 
         <!-- 连接参数：仅 OpenAI 兼容时显示 -->
         <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16"
-                Visibility="{x:Bind ProviderFormVis(Vm.Provider), Mode=OneWay}">
-            <Grid RowSpacing="12" ColumnSpacing="16">
+                Visibility="{x:Bind ProviderFormVis(Draft.Provider), Mode=OneWay}">
+            <StackPanel Spacing="12">
+            <Grid x:Name="ApiInputs" RowSpacing="12" ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" MaxWidth="480" />
@@ -50,32 +51,68 @@
                 <TextBlock Grid.ColumnSpan="2" Text="连接参数（API Key 仅写入本地配置，绝不出现在日志或界面提示中）" Style="{StaticResource CardTitleText}" />
 
                 <TextBlock Grid.Row="1" Text="API 地址" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="1"
+                <TextBox x:Name="ApiUrlBox" Grid.Row="1" Grid.Column="1"
                          PlaceholderText="https://api.openai.com/v1"
-                         Text="{x:Bind Vm.OpenAiBaseUrl, Mode=TwoWay}"
+                         Text="{x:Bind Draft.BaseUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" TextChanged="OnApiTextChanged"
                          HorizontalAlignment="Stretch" />
 
                 <TextBlock Grid.Row="2" Text="模型" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
-                <TextBox Grid.Row="2" Grid.Column="1" PlaceholderText="gpt-4o-mini"
-                         Text="{x:Bind Vm.OpenAiModel, Mode=TwoWay}"
-                         HorizontalAlignment="Stretch" />
+                <!-- 保持模型输入框与 API 地址框共用同一列宽；两个自定义图标放在输入框右侧。 -->
+                <Grid Grid.Row="2" Grid.Column="1">
+                    <AutoSuggestBox x:Name="ModelBox"
+                                    PlaceholderText="获取模型后选择，或手动填写模型名"
+                                    Text="{x:Bind Draft.Model, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" TextChanged="OnModelTextChanged"
+                                    SuggestionChosen="OnModelChosen" GotFocus="OnModelGotFocus"
+                                    TextBoxStyle="{StaticResource ScreenLensAutoSuggestTextBoxStyle}"
+                                    AutoMaximizeSuggestionArea="False" MaxSuggestionListHeight="320"
+                                    HorizontalAlignment="Stretch" AutomationProperties.Name="翻译模型" />
+                    <Button x:Name="ModelClearBtn" Width="40" Height="40" Padding="0" Margin="0,0,40,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnModelClearClick"
+                            Visibility="Collapsed" Style="{StaticResource SettingsIconButtonStyle}">
+                        <FontIcon Glyph="&#xE894;" FontSize="12" />
+                    </Button>
+                    <Button x:Name="ModelDropdownBtn" Width="40" Height="40" Padding="0" Margin="0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnModelDropdownClick"
+                            Style="{StaticResource SettingsIconButtonStyle}">
+                        <FontIcon Glyph="&#xE70D;" FontSize="12" />
+                    </Button>
+                </Grid>
 
                 <TextBlock Grid.Row="3" Text="API 密钥" Style="{StaticResource CardDescText}" VerticalAlignment="Center" />
-                <PasswordBox Grid.Row="3" Grid.Column="1" PlaceholderText="sk-••••••••••••••••••••"
-                             Password="{x:Bind Vm.OpenAiApiKey, Mode=TwoWay}"
+                <PasswordBox x:Name="ApiKeyBox" Grid.Row="3" Grid.Column="1" PlaceholderText="sk-••••••••••••••••••••"
+                             Password="{x:Bind Draft.ApiKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PasswordChanged="OnApiKeyChanged"
                              HorizontalAlignment="Stretch" PasswordRevealMode="Peek" />
             </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="ModelsBtn" Content="获取模型" Click="OnGetModelsClick" />
+                    <Button x:Name="TestBtn" Content="测试连接" Click="OnTestConnectionClick" />
+                    <ProgressRing x:Name="ApiProgress" Width="20" Height="20" IsActive="False" Visibility="Collapsed" />
+                    <Button x:Name="CancelApiBtn" Content="取消" Click="OnCancelApiClick" Visibility="Collapsed" />
+                </StackPanel>
+                <TextBlock Text="获取模型和测试连接使用当前填写的参数，不会保存配置；测试会发送一句简短文本。模型列表中的项目是否支持翻译，以测试结果为准。"
+                           Style="{StaticResource CardDescText}" TextWrapping="Wrap" />
+            </StackPanel>
         </Border>
 
         <!-- 关闭翻译说明 -->
         <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16"
-                Visibility="{x:Bind ProviderOffVis(Vm.Provider), Mode=OneWay}">
+                Visibility="{x:Bind ProviderOffVis(Draft.Provider), Mode=OneWay}">
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <FontIcon Glyph="&#xE7E7;" FontSize="16" Foreground="{ThemeResource AppTextSecondaryBrush}" />
                 <TextBlock Style="{StaticResource CardDescText}" VerticalAlignment="Center"
-                           Text="翻译已关闭：截图仅识别文字，不进行翻译。" />
+                           Text="保存后将关闭翻译：截图仅识别文字，不进行翻译。" />
             </StackPanel>
         </Border>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+            <Button x:Name="SaveTranslationBtn" Content="保存并启用" Click="OnSaveTranslationClick"
+                    Style="{StaticResource SettingsActionButtonStyle}" />
+            <Button x:Name="RevertTranslationBtn" Content="恢复已保存配置" Click="OnRevertTranslationClick"
+                    Style="{StaticResource SettingsActionButtonStyle}" />
+        </StackPanel>
+        <TextBlock Text="{x:Bind Draft.Status, Mode=OneWay}" Style="{StaticResource CardDescText}" TextWrapping="Wrap" />
+        <InfoBar x:Name="TranslationStatus" IsOpen="False" IsClosable="True"
+                 Foreground="{ThemeResource AppInfoBarForegroundBrush}" />
 
         <Grid Margin="0,12,0,0">
             <Grid.ColumnDefinitions>

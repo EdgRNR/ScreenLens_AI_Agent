@@ -52,7 +52,7 @@ namespace ScreenLens.WinUI.Services
         /// <summary>发起一次请求并返回响应 data；业务失败抛 BackendException。</summary>
         public async Task<JsonObject> CallAsync(string op, JsonObject? data,
             byte[]? image = null, int timeoutMs = DefaultTimeoutMs,
-            CancellationToken ct = default)
+            CancellationToken ct = default, Action<string>? onDelta = null)
         {
             using var requestTimeout = CancellationTokenSource
                 .CreateLinkedTokenSource(ct);
@@ -61,6 +61,8 @@ namespace ScreenLens.WinUI.Services
             var reqId = Interlocked.Increment(ref _nextId);
             using var pipe = new NamedPipeClientStream(".", PipeName,
                 PipeDirection.InOut, PipeOptions.Asynchronous);
+            var requestToken = data?["request_token"]?.GetValue<string>();
+            var written = false;
 
             try
             {
@@ -79,6 +81,7 @@ namespace ScreenLens.WinUI.Services
                     ["data"] = data?.DeepClone() ?? new JsonObject(),
                 };
                 await WriteFrameAsync(pipe, EncodeJson(request), token);
+                written = true;
                 if (image is { Length: > 0 })
                 {
                     if (image.Length > MaxFrame)
@@ -86,21 +89,32 @@ namespace ScreenLens.WinUI.Services
                     await WriteFrameAsync(pipe, image, token);
                 }
 
-                var payload = await ReadFrameAsync(pipe, token);
-                var response = JsonNode.Parse(Encoding.UTF8.GetString(payload))
-                    as JsonObject
-                    ?? throw new BackendException("internal", "响应不是 JSON 对象");
-                if (response["v"]?.GetValue<int>() != ProtocolVersion
-                    || response["id"]?.GetValue<int>() != reqId)
-                    throw new BackendException("protocol_mismatch", "后台响应版本或请求编号不匹配");
+                while (true)
+                {
+                    var payload = await ReadFrameAsync(pipe, token);
+                    var response = JsonNode.Parse(Encoding.UTF8.GetString(payload))
+                        as JsonObject
+                        ?? throw new BackendException("internal", "响应不是 JSON 对象");
+                    if (response["v"]?.GetValue<int>() != ProtocolVersion
+                        || response["id"]?.GetValue<int>() != reqId)
+                        throw new BackendException("protocol_mismatch", "后台响应版本或请求编号不匹配");
 
-                if (response["ok"]?.GetValue<bool>() == true)
-                    return response["data"]?.AsObject() ?? new JsonObject();
+                    if (response["event"]?.GetValue<string>() == "delta")
+                    {
+                        if (onDelta is null)
+                            throw new BackendException("protocol_error", "非流式调用收到增量响应");
+                        onDelta(response["data"]?["text"]?.GetValue<string>() ?? "");
+                        continue;
+                    }
 
-                var err = response["error"]?.AsObject();
-                throw new BackendException(
-                    err?["code"]?.GetValue<string>() ?? "internal",
-                    err?["message"]?.GetValue<string>() ?? "后台请求失败");
+                    if (response["ok"]?.GetValue<bool>() == true)
+                        return response["data"]?.AsObject() ?? new JsonObject();
+
+                    var err = response["error"]?.AsObject();
+                    throw new BackendException(
+                        err?["code"]?.GetValue<string>() ?? "internal",
+                        err?["message"]?.GetValue<string>() ?? "后台请求失败");
+                }
             }
             catch (BackendException)
             {
@@ -119,6 +133,19 @@ namespace ScreenLens.WinUI.Services
             {
                 throw new BackendException("agent_unavailable",
                     $"后台代理未运行或 IPC 连接失败：{e.Message}");
+            }
+            finally
+            {
+                // Target this request, including queued work; never cancel a later OCR task.
+                if (written && token.IsCancellationRequested && requestToken is not null)
+                {
+                    try
+                    {
+                        await CallAsync("CancelRequest", new JsonObject { ["request_token"] = requestToken },
+                            timeoutMs: 2000);
+                    }
+                    catch (Exception) { /* Agent may already have completed or disconnected. */ }
+                }
             }
         }
 

@@ -21,6 +21,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import time
 
 from screenlens.ipc.protocol import (
     encode_frame,
@@ -119,15 +120,54 @@ def _do_translate(req_id: int, data: dict) -> None:
     text = (data or {}).get("text") or ""
     cfg = (data or {}).get("config") or {}
     target = (data or {}).get("target_language", "zh")
+    pending = []
+    last_flush = 0.0
+
+    def flush():
+        nonlocal last_flush
+        if not pending:
+            return
+        frame = {"id": req_id, "event": "delta", "data": {"text": "".join(pending)}}
+        sys.stdout.buffer.write(encode_frame(json.dumps(frame, ensure_ascii=False).encode("utf-8")))
+        sys.stdout.buffer.flush()
+        pending.clear()
+        last_flush = time.monotonic()
+
+    def delta(text):
+        pending.append(text)
+        if time.monotonic() - last_flush >= 0.05 or len(pending) >= 64:
+            flush()
+
     try:
         provider = get_provider(cfg)
-        translated = provider.translate(text, target)
+        if data.get("stream"):
+            translated = provider.translate_stream(text, target, delta)
+            flush()
+        else:
+            translated = provider.translate(text, target)
         _respond(req_id, data={"text": translated})
     except TranslationError as e:
+        flush()
         _respond(req_id, error_code="translate_failed", message=str(e))
     except Exception as e:
         logger.exception("worker 翻译异常")
         _respond(req_id, error_code="translate_failed", message=f"翻译失败：{e}")
+
+
+def _do_translation_setup(req_id: int, op: str, data: dict) -> None:
+    from screenlens.translate.openai_compat import OpenAICompatProvider
+    from screenlens.translate.provider import TranslationError
+    try:
+        provider = OpenAICompatProvider(data.get("openai") or {})
+        if op == "models":
+            _respond(req_id, data={"models": provider.list_models()})
+        else:
+            text = provider.translate("Hello, world!", data.get("target_language") or "zh")
+            _respond(req_id, data={"text": text})
+    except TranslationError as e:
+        _respond(req_id, error_code="translate_failed", message=str(e))
+    except Exception:
+        _respond(req_id, error_code="translate_failed", message="服务响应异常，请检查 API 配置。")
 
 
 def main() -> int:
@@ -152,6 +192,8 @@ def main() -> int:
                 _do_ocr(req_id)
             elif op == "translate":
                 _do_translate(req_id, msg.get("data") or {})
+            elif op in ("models", "test_translation"):
+                _do_translation_setup(req_id, op, msg.get("data") or {})
             else:
                 _respond(req_id, error_code="unknown_op",
                          message=f"worker 不支持的操作 {op}")

@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import threading
+from collections import OrderedDict
 
 from screenlens.ipc.protocol import encode_frame, read_frame
 
@@ -129,6 +130,8 @@ class WorkerManager:
         self._worker: _WorkerProc | None = None
         self._idle_timer: threading.Timer | None = None
         self._current_cancelled = threading.Event()
+        self._active_request_key = None
+        self._cancelled_keys = OrderedDict()
 
     # ------------------------------------------------------------ 公共 API
 
@@ -137,16 +140,26 @@ class WorkerManager:
         return self._execute({"op": "ocr", "id": 1}, binary=png)
 
     def run_translate(self, text: str, translation_cfg: dict,
-                      target_lang: str) -> dict:
+                      target_lang: str, *, on_delta=None, request_key=None) -> dict:
         return self._execute({
             "op": "translate", "id": 2,
             "data": {"text": text, "config": translation_cfg,
-                     "target_language": target_lang}})
+                     "target_language": target_lang, "stream": on_delta is not None}},
+            on_delta=on_delta, request_key=request_key)
 
-    def cancel_current(self) -> None:
+    def translation_setup(self, op: str, data: dict, *, request_key=None) -> dict:
+        return self._execute({"op": op, "id": 3, "data": data}, request_key=request_key)
+
+    def cancel_current(self, request_key=None) -> None:
         """取消进行中的任务（终止 worker；由下一次任务自动重启）。"""
-        self._current_cancelled.set()
         with self._state_lock:
+            if request_key is not None:
+                self._cancelled_keys[request_key] = None
+                while len(self._cancelled_keys) > 128:
+                    self._cancelled_keys.popitem(last=False)
+                if request_key != self._active_request_key:
+                    return
+            self._current_cancelled.set()
             w = self._worker
         if w is not None:
             try:
@@ -168,12 +181,27 @@ class WorkerManager:
 
     # ------------------------------------------------------------ 内部实现
 
-    def _execute(self, ctrl: dict, binary: bytes | None = None) -> dict:
-        with self._lock:  # 串行：同时最多一个 worker 任务
+    def _execute(self, ctrl: dict, binary: bytes | None = None, *, on_delta=None,
+                 request_key=None) -> dict:
+        def check_cancelled():
+            with self._state_lock:
+                cancelled = request_key is not None and request_key in self._cancelled_keys
+            if cancelled:
+                raise WorkerError("cancelled", "任务已取消")
+
+        while not self._lock.acquire(timeout=0.1):
+            check_cancelled()
+        w = None
+        complete = False
+        try:
             self._current_cancelled.clear()
+            with self._state_lock:
+                self._active_request_key = request_key
+            check_cancelled()
             self._cancel_idle_timer()
             try:
                 w = self._ensure_worker()
+                check_cancelled()
                 watchdog = threading.Timer(
                     _TASK_TIMEOUT, self._kill_current)
                 watchdog.daemon = True
@@ -183,6 +211,13 @@ class WorkerManager:
                     if binary is not None:
                         w.send_binary(binary)
                     resp = w.read_json()
+                    while resp.get("event") == "delta":
+                        if on_delta is None:
+                            raise WorkerError("internal", "非流式任务收到增量响应")
+                        check_cancelled()
+                        on_delta((resp.get("data") or {}).get("text") or "")
+                        resp = w.read_json()
+                    complete = True
                 finally:
                     watchdog.cancel()
                 if resp.get("ok"):
@@ -196,6 +231,18 @@ class WorkerManager:
                 raise
             finally:
                 self._schedule_idle()
+        finally:
+            # A disconnected stream must not leave unread frames in a reused worker.
+            if w is not None and not complete:
+                with self._state_lock:
+                    if self._worker is w:
+                        self._worker = None
+                w.dead = True
+                w.dispose()
+            with self._state_lock:
+                self._active_request_key = None
+                self._cancelled_keys.pop(request_key, None)
+            self._lock.release()
 
     def _ensure_worker(self) -> _WorkerProc:
         with self._state_lock:

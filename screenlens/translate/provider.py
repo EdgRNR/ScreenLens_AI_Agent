@@ -28,6 +28,13 @@ class TranslationProvider(abc.ABC):
     def translate(self, text: str, target_lang: str) -> str:
         """翻译文本到目标语言，失败时抛 TranslationError。"""
 
+    def translate_stream(self, text: str, target_lang: str, on_delta) -> str:
+        """非流式服务保留一次性返回的行为。"""
+        result = self.translate(text, target_lang)
+        if result:
+            on_delta(result)
+        return result
+
 
 class NoneProvider(TranslationProvider):
     """表示"没有可用的翻译服务"。"""

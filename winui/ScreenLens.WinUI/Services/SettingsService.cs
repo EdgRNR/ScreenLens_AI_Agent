@@ -362,6 +362,29 @@ namespace ScreenLens.WinUI.Services
             catch { return null; }
         }
 
+        /// <summary>保存草稿成功后才更新正在使用的配置。</summary>
+        public static async Task<string?> SaveTranslationAsync(DemoSettings vm, JsonObject translation)
+        {
+            await _backendSaveMutex.WaitAsync();
+            try
+            {
+                var config = new JsonObject
+                {
+                    ["hotkey"] = DisplayToKeyboard(vm.HotkeyText),
+                    ["translation"] = translation.DeepClone(),
+                };
+                await BackendClient.Instance.CallAsync("SaveSettings", new JsonObject { ["config"] = config });
+                var suppressed = vm.SuppressPersist;
+                vm.SuppressPersist = true;
+                try { ApplyBackendToVm(vm, config); }
+                finally { vm.SuppressPersist = suppressed; }
+                return null;
+            }
+            catch (BackendException ex) { return ex.Message; }
+            catch (Exception) { return "配置未能保存，请确认后台代理正在运行后重试。"; }
+            finally { _backendSaveMutex.Release(); }
+        }
+
         private static double GetDouble(JsonObject o, string key, double fallback)
         {
             try { return o[key]?.GetValue<double>() ?? fallback; }
