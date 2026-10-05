@@ -10,13 +10,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from screenlens.ocr.engine import OcrEngine
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-
-
-def make_test_image() -> str:
+def make_test_image() -> Image.Image:
     """生成含中/英/日/混合文字的标准测试图。"""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    path = os.path.join(DATA_DIR, "ocr_test.png")
     img = Image.new("RGB", (900, 420), "white")
     d = ImageDraw.Draw(img)
     lines = [
@@ -39,8 +34,7 @@ def make_test_image() -> str:
             font = ImageFont.truetype(r"C:\Windows\Fonts\simhei.ttf", 32)
         d.text((40, y), text, fill="black", font=font)
         y += 76
-    img.save(path)
-    return path
+    return img
 
 
 class TestOcr(unittest.TestCase):
@@ -53,8 +47,7 @@ class TestOcr(unittest.TestCase):
         cls.engine._ensure_engine()
 
     def _recognize(self):
-        path = make_test_image()
-        with Image.open(path) as img:
+        with make_test_image() as img:
             return self.engine.recognize(img)
 
     def test_english(self):
@@ -90,6 +83,31 @@ class TestOcr(unittest.TestCase):
         img = Image.new("RGB", (200, 100), "white")
         result = self.engine.recognize(img)
         self.assertTrue(result.is_empty)
+
+    def test_upright_number_line_is_not_rotated_by_marginal_classifier_score(self):
+        text = "订单编号 AB01OIl 0123456789 金额 ￥128.50 / 3.14159"
+        font = ImageFont.truetype(r"C:\Windows\Fonts\msyh.ttc", 24)
+        img = Image.new("RGB", (int(font.getlength(text)) + 24, 48), "white")
+        ImageDraw.Draw(img).text((12, 8), text, font=font, fill="black")
+        result = self.engine.recognize(img)
+        self.assertIn("订单编号", result.text)
+        self.assertIn("0123456789", result.text)
+        self.assertIn("3.14159", result.text)
+        self.assertEqual(len(result.lines), len(result.boxes))
+        for box in result.boxes:
+            for x, y in box:
+                self.assertGreaterEqual(x, 0)
+                self.assertGreaterEqual(y, 0)
+                self.assertLessEqual(x, img.width)
+                self.assertLessEqual(y, img.height)
+
+    def test_upside_down_chinese_still_recognized(self):
+        font = ImageFont.truetype(r"C:\Windows\Fonts\msyh.ttc", 16)
+        img = Image.new("RGB", (500, 40), "white")
+        ImageDraw.Draw(img).text((12, 8), "今天天气不错，我们一起去公园散步吧！", font=font, fill="black")
+        result = self.engine.recognize(img.rotate(180))
+        self.assertIn("今天天气不错", result.text)
+        self.assertIn("公园散步", result.text)
 
 
 if __name__ == "__main__":

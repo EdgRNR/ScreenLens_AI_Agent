@@ -31,6 +31,14 @@ internal static class Program
                 Require((CaptureWindowPresentation.GetCloakedFlags(hwnd) & 1) != 0,
                     "DWM reports application cloak before first show");
                 Require(!IsWindowVisible(hwnd), "cloaking does not show the window");
+                // Native-visible but cloaked: exercise recapture hiding without
+                // exposing a test surface or stealing focus on the desktop.
+                ShowWindow(hwnd, 4); // SW_SHOWNOACTIVATE
+                Require(IsWindowVisible(hwnd), "test surface has native visibility while cloaked");
+                CaptureWindowPresentation.HideBeforeCapture(hwnd);
+                Require(!IsWindowVisible(hwnd), "recapture synchronously hides the old HWND");
+                Require((CaptureWindowPresentation.GetCloakedFlags(hwnd) & 1) != 0,
+                    "old surface stays out of desktop composition before capture");
                 // Remove native topmost state to exercise recovery rather than
                 // repeatedly passing because the window was already topmost.
                 Require(SetWindowPos(hwnd, new IntPtr(-2), 0, 0, 0, 0, 0x0013),
@@ -51,7 +59,7 @@ internal static class Program
                     "reveal removes application cloak after synchronization");
                 Require(!IsWindowVisible(hwnd), "reveal leaves native visibility to the caller");
             }
-            Console.WriteLine("PASS: native topmost recovery, foreground preservation, bounds, startup cloak, synchronized reveal, and repeated use.");
+            Console.WriteLine("PASS: recapture hide/cloak synchronization, native topmost recovery, foreground preservation, bounds, startup cloak, synchronized reveal, and repeated use.");
         }
         finally
         {
@@ -93,6 +101,8 @@ internal static class Program
     private static extern bool DestroyWindow(IntPtr hwnd);
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hwnd, int command);
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hwnd, out NativeRect rect);
     [DllImport("user32.dll")]

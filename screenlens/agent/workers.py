@@ -81,9 +81,24 @@ class _WorkerProc:
         return obj
 
     def dispose(self) -> None:
+        try:
+            self._stop_process()
+        finally:
+            # Explicitly close dead pipes: a buffered stdin may otherwise
+            # flush against a killed worker during garbage collection.
+            for stream in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except (OSError, ValueError):
+                        pass
+            self.dead = True
+
+    def _stop_process(self) -> None:
         if self.dead:
             try:
                 self.proc.kill()
+                self.proc.wait(timeout=_EXIT_GRACE)
             except Exception:
                 pass
             return
@@ -188,6 +203,8 @@ class WorkerManager:
             if w is not None and not w.dead and w.proc.poll() is None:
                 return w
             self._worker = None
+            if w is not None:
+                w.dispose()
             w = self._spawn()
             self._worker = w
             return w

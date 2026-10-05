@@ -27,6 +27,19 @@ from screenlens.ipc.protocol import (
     read_frame,
 )
 
+# Only the OCR worker loads the engine; importing the agent stays lightweight.
+# The worker processes requests serially and exits after its idle timeout.
+_ocr_engine = None
+
+
+def _get_ocr_engine():
+    global _ocr_engine
+    if _ocr_engine is None:
+        from screenlens.ocr.engine import OcrEngine
+
+        _ocr_engine = OcrEngine()
+    return _ocr_engine
+
 
 def _setup_logging() -> logging.Logger:
     log_dir = os.path.join(
@@ -62,17 +75,15 @@ def _do_ocr(req_id: int) -> None:
 
     from PIL import Image
 
-    from screenlens.ocr.engine import OcrEngine
-
     png = read_frame(_stdin_read_exact)
     if png is None:
         _respond(req_id, error_code="bad_request", message="缺少图像帧")
         return
     t0 = time.perf_counter()
     try:
-        img = Image.open(io.BytesIO(png))
-        img.load()
-        result = OcrEngine().recognize(img)
+        with Image.open(io.BytesIO(png)) as img:
+            img.load()
+            result = _get_ocr_engine().recognize(img)
     except Exception as e:
         logger.exception("worker OCR 失败")
         _respond(req_id, error_code="ocr_failed", message=f"OCR 识别失败：{e}")

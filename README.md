@@ -61,6 +61,8 @@ python run_legacy.pyw      # 无控制台模式
 | WinUI 前端 `ScreenLens.WinUI.exe` | 设置窗口 / 截图选区 / 结果窗口；窗口关闭后进程退出 | 按需测量，不计入“仅后台空闲”指标 |
 | OCR / 翻译 worker | 任务期间按需启动；空闲 15 秒后退出，OCR 模型随进程退出回收 | 任务期间升高；空闲态不应残留 |
 
+OCR 固定使用 RapidOCR 3.9.2、PP-OCRv6 small 检测/识别模型及 ONNX Runtime CPU 推理。同一 worker 内复用引擎；首次请求仍需加载模型。截图检测采用长边限制，避免把狭长选区按短边过度放大，并对倒置方向判定使用更高置信度门槛。配置、比较结果与复测命令见 [OCR 优化说明](docs/OCR_PIPELINE.md)。
+
 ### 用 Visual Studio 启动（推荐）
 
 打开 `winui\ScreenLens.WinUI\ScreenLens.WinUI.slnx`，选择 **x64 / Unpackaged** 后按 F5。

@@ -32,6 +32,7 @@ namespace ScreenLens.WinUI.Views.Result
         private readonly Views.Capture.SelectionWindow? _owner;
         private bool _translating;
         private bool _closed;
+        private bool _recapturing;
         private bool? _actionsStacked;
         private InputNonClientPointerSource? _captionPointerSource;
         private RectInt32? _captionRect;
@@ -367,29 +368,51 @@ namespace ScreenLens.WinUI.Views.Result
 
         private async void OnRecaptureClick(object sender, RoutedEventArgs e)
         {
-            // 先把结果窗口藏起来，避免它进入新一轮截图
-            AppWindow.Hide();
-            var shot = await ScreenCapture.CaptureAsync();
-            if (shot is null)
-            {
-                AppWindow.Show();
-                ShowStatus("屏幕捕获失败，请重试", InfoBarSeverity.Error);
-                return;
-            }
-            var sel = new Views.Capture.SelectionWindow(shot);
+            if (_closed || _recapturing) return;
+            _recapturing = true;
+            RecaptureBtn.IsEnabled = false;
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            Views.Capture.SelectionWindow? sel = null;
             try
             {
+                CaptureWindowPresentation.HideBeforeCapture(hwnd);
+                var shot = await ScreenCapture.CaptureAsync();
+                if (shot is null)
+                    throw new InvalidOperationException($"屏幕捕获失败：{ScreenCapture.LastError}");
+                if (_closed)
+                {
+                    shot.ReleasePixels();
+                    return;
+                }
+                sel = new Views.Capture.SelectionWindow(shot);
                 await sel.PrepareForDisplayAsync();
+                if (_closed)
+                {
+                    sel.Close();
+                    return;
+                }
                 await sel.ShowForCaptureAsync();
+                Close(); // 本窗口关闭，进程由新选区窗口维持
             }
             catch (Exception ex)
             {
-                sel.Close();
+                sel?.Close();
+                if (_closed) return;
+                // A failed recapture must restore the result window as well
+                // as native visibility; Show alone does not remove its cloak.
+                try { CaptureWindowPresentation.Reveal(hwnd); }
+                catch (Exception restoreError)
+                {
+                    App.WriteLifecycleLog($"重新截图恢复窗口失败：{restoreError.Message}");
+                }
                 AppWindow.Show();
-                ShowStatus($"截图界面启动失败：{ex.Message}", InfoBarSeverity.Error);
-                return;
+                ShowStatus($"重新截图失败：{ex.Message}", InfoBarSeverity.Error);
             }
-            Close(); // 本窗口关闭，进程由新选区窗口维持
+            finally
+            {
+                _recapturing = false;
+                if (!_closed) RecaptureBtn.IsEnabled = true;
+            }
         }
 
         private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)

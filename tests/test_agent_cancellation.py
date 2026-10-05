@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from screenlens.agent.workers import WorkerError, WorkerManager
+from screenlens.agent.workers import WorkerError, WorkerManager, _WorkerProc
 from screenlens.ipc.protocol import encode_frame, read_json_frame
 
 
@@ -22,6 +22,7 @@ class _FakeWorker:
         self.proc = Mock()
         self.proc.poll.side_effect = lambda: -9 if self.killed.is_set() else None
         self.proc.kill.side_effect = self.killed.set
+        self.dispose = Mock()
 
     def send_ctrl(self, ctrl):
         pass
@@ -55,6 +56,7 @@ class TestWorkerCancellation(unittest.TestCase):
             self.assertEqual(raised.exception.message, "任务已取消")
             self.assertEqual(manager.run_ocr(b"next image"), {"text": "next capture"})
             self.assertEqual(spawn.call_count, 2)
+            active.dispose.assert_called_once()
 
     def test_unrequested_worker_exit_remains_a_crash(self):
         manager = WorkerManager()
@@ -64,6 +66,27 @@ class TestWorkerCancellation(unittest.TestCase):
                 manager.run_ocr(b"image")
             self.assertEqual(raised.exception.code, "worker_crashed")
             self.assertEqual(raised.exception.message, "worker 进程已退出")
+
+    def test_dead_worker_closes_all_pipes_even_if_stdin_flush_fails(self):
+        proc = Mock()
+        proc.stdin.close.side_effect = OSError("pipe already broken")
+        worker = _WorkerProc(proc)
+        worker.dead = True
+        worker.dispose()
+        proc.kill.assert_called_once()
+        proc.wait.assert_called_once()
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            stream.close.assert_called_once()
+
+    def test_normal_exit_also_closes_all_pipes(self):
+        proc = Mock()
+        worker = _WorkerProc(proc)
+        worker.dispose()
+        proc.kill.assert_not_called()
+        proc.wait.assert_called_once()
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            stream.close.assert_called_once()
+        self.assertTrue(worker.dead)
 
 
 class _MemoryPipe:
