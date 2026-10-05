@@ -231,6 +231,24 @@ namespace ScreenLens.WinUI.ViewModels
             set { if (CanEnableFreeformGlow) FreeformGlowEnabled = value; }
         }
 
+        private double _freeformGlowWidthPercent = 100;
+        /// <summary>彩虹轨迹、光头和收尾光晕的宽度比例；普通圈选不受影响。</summary>
+        public double FreeformGlowWidthPercent
+        {
+            get => _freeformGlowWidthPercent;
+            set
+            {
+                value = double.IsFinite(value) ? Math.Clamp(value, 50, 200) : 100;
+                if (Set(ref _freeformGlowWidthPercent, value))
+                {
+                    Raise(nameof(FreeformGlowWidthLabel));
+                    if (!SuppressPersist) SettingsService.SaveFrontendDebounced(this);
+                }
+            }
+        }
+
+        public string FreeformGlowWidthLabel => $"{FreeformGlowWidthPercent:0}%";
+
         /// <summary>开启：松开鼠标显示确认工具条；关闭：松开鼠标直接开始识别</summary>
         private bool _confirmOnRelease = true;
         public bool ConfirmOnRelease

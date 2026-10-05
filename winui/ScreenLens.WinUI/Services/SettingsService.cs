@@ -117,6 +117,7 @@ namespace ScreenLens.WinUI.Services
                         vm.CaptureDimMaskEnabled = GetBool(prefs, "captureDimMaskEnabled", true);
                         vm.FreeformBorderEnabled = GetBool(prefs, "freeformBorderEnabled", true);
                         vm.FreeformGlowEnabled = GetBool(prefs, "freeformGlowEnabled", true);
+                        vm.FreeformGlowWidthPercent = GetDouble(prefs, "freeformGlowWidthPercent", 100);
                         vm.ConfirmOnRelease =
                             GetBool(prefs, "confirmOnRelease", true);
                         vm.ResultPosition = GetInt(prefs, "resultPosition", 0);
@@ -285,6 +286,7 @@ namespace ScreenLens.WinUI.Services
                         ["captureDimMaskEnabled"] = vm.CaptureDimMaskEnabled,
                         ["freeformBorderEnabled"] = vm.FreeformBorderEnabled,
                         ["freeformGlowEnabled"] = vm.FreeformGlowEnabled,
+                        ["freeformGlowWidthPercent"] = vm.FreeformGlowWidthPercent,
                         ["confirmOnRelease"] = vm.ConfirmOnRelease,
                         ["resultPosition"] = vm.ResultPosition,
                         ["fontSize"] = vm.OriginalFontSize,
@@ -356,6 +358,12 @@ namespace ScreenLens.WinUI.Services
         {
             try { return o[key]?.GetValue<int>(); }
             catch { return null; }
+        }
+
+        private static double GetDouble(JsonObject o, string key, double fallback)
+        {
+            try { return o[key]?.GetValue<double>() ?? fallback; }
+            catch { return fallback; }
         }
 
         private static bool GetBool(JsonObject o, string key, bool fallback)

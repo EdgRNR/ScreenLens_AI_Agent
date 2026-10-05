@@ -35,6 +35,7 @@ internal sealed partial class FreeformGlowTrail
         private readonly NativePoint[] _outline = new NativePoint[SampleCount * 2];
         private readonly LinearGradientBrush[] _brushes = new LinearGradientBrush[LayerCount];
         private int _bufferIndex;
+        private float _widthScale = 1;
         private bool _disposed;
 
         internal TipTransition(Canvas parent)
@@ -80,15 +81,16 @@ internal sealed partial class FreeformGlowTrail
             _distances[0] = 0;
             int count = 1;
             float traversed = 0;
+            float spacing = Spacing * _widthScale;
             var from = _centers[0];
             for (int i = points.Count - 1; i >= 0 && count < SampleCount; i--)
             {
                 var to = new Vector2((float)points[i].X, (float)points[i].Y);
                 float segment = Vector2.Distance(from, to);
                 if (segment < 0.001f) continue;
-                while (count < SampleCount && count * Spacing <= traversed + segment)
+                while (count < SampleCount && count * spacing <= traversed + segment)
                 {
-                    float distance = count * Spacing;
+                    float distance = count * spacing;
                     _centers[count] = Vector2.Lerp(from, to, Math.Clamp((distance - traversed) / segment, 0, 1));
                     _distances[count++] = distance;
                 }
@@ -110,9 +112,10 @@ internal sealed partial class FreeformGlowTrail
                 origin = Vector2.Min(origin, _centers[i]);
                 extent = Vector2.Max(extent, _centers[i]);
             }
-            origin -= new Vector2(20);
-            _host.Width = extent.X - origin.X + 20;
-            _host.Height = extent.Y - origin.Y + 20;
+            float padding = 20 * _widthScale;
+            origin -= new Vector2(padding);
+            _host.Width = extent.X - origin.X + padding;
+            _host.Height = extent.Y - origin.Y + padding;
             Canvas.SetLeft(_host, origin.X);
             Canvas.SetTop(_host, origin.Y);
             var entry = _centers[count - 1];
@@ -134,11 +137,11 @@ internal sealed partial class FreeformGlowTrail
             _bufferIndex = 1 - _bufferIndex;
             for (int layer = 0; layer < LayerCount; layer++)
             {
-                float radius = (LayerCount - layer) * 0.75f;
+                float radius = (LayerCount - layer) * 0.75f * _widthScale;
                 var minimum = new Vector2(float.PositiveInfinity);
                 for (int i = 0; i < count; i++)
                 {
-                    float progress = Math.Clamp(1 - _distances[i] / Length, 0, 1);
+                    float progress = Math.Clamp(1 - _distances[i] / (Length * _widthScale), 0, 1);
                     float smooth = progress * progress * (3 - 2 * progress);
                     var offset = _normals[i] * radius * (1 + 0.9f * smooth);
                     var center = _centers[i] - origin;
@@ -163,6 +166,8 @@ internal sealed partial class FreeformGlowTrail
         {
             if (!_disposed) _visual.StartAnimation("Opacity", fade);
         }
+
+        internal void SetWidth(float scale) => _widthScale = scale;
 
         internal void Hide()
         {

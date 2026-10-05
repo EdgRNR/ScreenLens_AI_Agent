@@ -52,6 +52,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
     private bool _visible;
     private bool _disposed;
     private float _phase;
+    private double _widthScale = 1;
     internal event Action<Exception>? Failed;
 
     internal FreeformGlowTrail(FrameworkElement host)
@@ -108,6 +109,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
                 _buffers[i, 0] = new PointBuffer(curve.Points);
                 _buffers[i, 1] = new PointBuffer(new PointCollection());
             }
+            CreateFinishedDepth();
             _tip = new TipTransition(_host);
             _head = compositor.CreateSpriteVisual();
             _head.Size = new Vector2(24);
@@ -143,6 +145,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
             _visible = true;
         }
         _root.IsVisible = true;
+        SetFinishedDepthVisible(!drawing && points.Count >= 4);
         MoveHead(headPosition);
         if (drawing)
         {
@@ -182,9 +185,24 @@ internal sealed partial class FreeformGlowTrail : IDisposable
         if (!_disposed)
         {
             _headPosition = point;
-            _head.Offset = new Vector3((float)point.X - 12, (float)point.Y - 12, 0);
+            float radius = (float)(12 * _widthScale);
+            _head.Offset = new Vector3((float)point.X - radius, (float)point.Y - radius, 0);
             if (_rendering) _dirty = true;
         }
+    }
+
+    internal void SetWidth(double scale)
+    {
+        if (_disposed) return;
+        scale = double.IsFinite(scale) ? Math.Clamp(scale, 0.5, 2) : 1;
+        if (scale == _widthScale) return;
+        _widthScale = scale;
+        for (int i = 0; i < LayerCount; i++)
+            _layers[i].StrokeThickness = (LayerCount - i) * 1.5 * scale;
+        _head.Size = new Vector2((float)(24 * scale));
+        _tip?.SetWidth((float)scale);
+        UpdateFinishedDepthWidth();
+        MoveHead(_headPosition);
     }
 
     internal void Freeze()
@@ -210,6 +228,8 @@ internal sealed partial class FreeformGlowTrail : IDisposable
         _visible = false;
         _root.IsVisible = false;
         foreach (var layer in _layers) layer.Visibility = Visibility.Collapsed;
+        SetFinishedDepthVisible(false);
+        ClearFinishedDepthGeometry();
         foreach (var curve in _curves) curve.Points.Clear();
         _curveBuilder.Reset();
     }
@@ -274,7 +294,8 @@ internal sealed partial class FreeformGlowTrail : IDisposable
             int used = _curveBuilder.Count * 3;
             if (_samples.Length < used)
                 _samples = new NativePoint[Math.Max(used, Math.Max(96, _samples.Length * 2))];
-            double originX = _curveBuilder.Left - 10, originY = _curveBuilder.Top - 10;
+            // Leave room for the widest finished halo and its small shadow offset.
+            double originX = _curveBuilder.Left - 40, originY = _curveBuilder.Top - 40;
             int sample = 0;
             foreach (var curve in _curveBuilder.Curves)
             {
@@ -292,11 +313,13 @@ internal sealed partial class FreeformGlowTrail : IDisposable
                 Canvas.SetTop(_layers[i], originY);
                 _curves[i].Points = buffer.Points;
             }
+            PositionFinishedDepth(originX, originY);
 
             void Write(Point point)
                 => _samples[sample++] = new NativePoint { X = (float)(point.X - originX), Y = (float)(point.Y - originY) };
         }
         if (_rendering) _tip?.Update(_points, _headPosition);
+        else UpdateFinishedDepthGeometry();
     }
 
     private static Color Lerp(Color a, Color b, double amount)
@@ -351,6 +374,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
         Failed = null;
         _colorTimer.Tick -= OnColorTick;
         ElementCompositionPreview.SetElementChildVisual(_host, null);
+        DisposeFinishedDepth();
         foreach (var layer in _layers)
         {
             if (layer is null) continue;

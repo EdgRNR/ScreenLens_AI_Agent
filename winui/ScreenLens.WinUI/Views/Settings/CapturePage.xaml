@@ -40,6 +40,16 @@
                           OnContent="" OffContent="" AutomationProperties.Name="彩虹圈选光效" />
         </controls:SettingCard>
 
+        <controls:SettingCard Icon="&#xE790;" Title="彩虹圈选宽度" Description="默认 100%，可调节为 50%–200%；仅影响彩虹光效，圈选完成后显示柔和光晕与轻微阴影">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Slider x:Name="FreeformGlowWidthSlider" Width="180" Minimum="50" Maximum="200" StepFrequency="10"
+                        IsEnabled="{x:Bind Vm.FreeformGlowActive, Mode=OneWay}"
+                        Value="{x:Bind Vm.FreeformGlowWidthPercent, Mode=TwoWay}"
+                        AutomationProperties.Name="彩虹圈选宽度百分比" />
+                <TextBlock Text="{x:Bind Vm.FreeformGlowWidthLabel, Mode=OneWay}" MinWidth="42" VerticalAlignment="Center" />
+            </StackPanel>
+        </controls:SettingCard>
+
         <controls:SettingCard Icon="&#xE790;" Title="选区背景黑色遮罩" Description="开启后压暗选区外的画面；关闭后保持截图原始亮度">
             <ToggleSwitch IsOn="{x:Bind Vm.CaptureDimMaskEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="选区背景黑色遮罩" />
         </controls:SettingCard>

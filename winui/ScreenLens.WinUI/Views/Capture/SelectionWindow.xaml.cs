@@ -892,6 +892,7 @@ namespace ScreenLens.WinUI.Views.Capture
                             _freeformGlow = new FreeformGlowTrail(FreeformGlowHost);
                             _freeformGlow.Failed += OnFreeformGlowFailed;
                         }
+                        _freeformGlow.SetWidth(_vm.FreeformGlowWidthPercent / 100);
                         _freeformGlow.Update(_freeformPoints, _dragging, _lastPointerPosition);
                     }
                     else _freeformGlow?.Clear();
