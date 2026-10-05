@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../../winui/ScreenLens.WinUI/Views/Capture/GlowCurveBuilder.cs" Link="GlowCurveBuilder.cs" />
+    <Compile Include="../../../winui/ScreenLens.WinUI/Views/Capture/GlowStrokeSmoother.cs" Link="GlowStrokeSmoother.cs" />
   </ItemGroup>
 </Project>

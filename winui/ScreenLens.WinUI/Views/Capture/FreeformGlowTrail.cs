@@ -43,7 +43,8 @@ internal sealed partial class FreeformGlowTrail : IDisposable
     private readonly DispatcherQueueTimer _colorTimer;
     private readonly Stopwatch _elapsed = new();
     private NativePoint[] _samples = Array.Empty<NativePoint>();
-    private readonly GlowCurveBuilder _curveBuilder = new();
+    private readonly GlowStrokeSmoother _strokeSmoother = new();
+    private readonly GlowCurveBuilder _curveBuilder = new(errorTolerance: 0.5, lookahead: GlowStrokeSmoother.Lookahead);
     private readonly PointBuffer[,] _buffers = new PointBuffer[LayerCount, 2];
     private int _bufferIndex;
     private IReadOnlyList<Point>? _points;
@@ -232,6 +233,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
         ClearFinishedDepthGeometry();
         foreach (var curve in _curves) curve.Points.Clear();
         _curveBuilder.Reset();
+        _strokeSmoother.Reset();
     }
 
     private void StopRendering()
@@ -289,7 +291,8 @@ internal sealed partial class FreeformGlowTrail : IDisposable
         // Completed chunks are cached while drawing; actual OCR points stay intact.
         bool closingLine = !_rendering && _points.Count >= 3
             && _points[^1] == _points[0] && _headPosition != _points[^1];
-        if (_curveBuilder.Update(_points, rebuild: !_rendering, straightClosingEdge: closingLine))
+        var displayPoints = _strokeSmoother.Update(_points, rebuild: !_rendering, straightClosingEdge: closingLine);
+        if (_curveBuilder.Update(displayPoints, rebuild: !_rendering, straightClosingEdge: closingLine))
         {
             int used = _curveBuilder.Count * 3;
             if (_samples.Length < used)
@@ -318,7 +321,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
             void Write(Point point)
                 => _samples[sample++] = new NativePoint { X = (float)(point.X - originX), Y = (float)(point.Y - originY) };
         }
-        if (_rendering) _tip?.Update(_points, _headPosition);
+        if (_rendering) _tip?.Update(displayPoints, _headPosition);
         else UpdateFinishedDepthGeometry();
     }
 
@@ -385,6 +388,7 @@ internal sealed partial class FreeformGlowTrail : IDisposable
         }
         _brush.GradientStops.Clear();
         _curveBuilder.Reset();
+        _strokeSmoother.Reset();
         _samples = Array.Empty<NativePoint>();
         foreach (var buffer in _buffers) buffer?.Dispose();
         _tip?.Dispose();

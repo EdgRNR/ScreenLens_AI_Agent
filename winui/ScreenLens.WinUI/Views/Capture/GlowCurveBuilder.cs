@@ -5,7 +5,7 @@ using Windows.Foundation;
 namespace ScreenLens.WinUI.Views.Capture;
 
 /// <summary>
-/// Fits cubic curves to the display trail with a fixed 0.35 DIP error.
+/// Fits cubic curves to the display trail with a fixed visual error.
 /// Sealed chunks are immutable while drawing, so adding many laps neither
 /// coarsens old curves nor refits the entire pointer history on every frame.
 /// The original selection polygon is never modified.
@@ -13,17 +13,26 @@ namespace ScreenLens.WinUI.Views.Capture;
 internal sealed class GlowCurveBuilder
 {
     private const int ChunkSize = 128;
-    private const double ErrorSquared = 0.35 * 0.35;
+    private readonly double _errorSquared;
+    private readonly int _lookahead;
     internal readonly record struct Curve(Point Start, Point Control1, Point Control2, Point End);
     private readonly List<Curve> _completed = new();
     private readonly List<Curve> _active = new();
-    private readonly double[] _parameters = new double[ChunkSize + 1];
+    private readonly double[] _parameters;
     private IReadOnlyList<Point>? _points;
     private int _sealedEnd, _lastCount;
     private bool _straightClosingEdge;
     internal double Left { get; private set; }
     internal double Top { get; private set; }
     internal int Count => _completed.Count + _active.Count;
+    internal GlowCurveBuilder(double errorTolerance = 0.35, int lookahead = 0)
+    {
+        if (!double.IsFinite(errorTolerance) || errorTolerance <= 0) throw new ArgumentOutOfRangeException(nameof(errorTolerance));
+        if (lookahead < 0 || lookahead > ChunkSize) throw new ArgumentOutOfRangeException(nameof(lookahead));
+        _errorSquared = errorTolerance * errorTolerance;
+        _lookahead = lookahead;
+        _parameters = new double[ChunkSize + lookahead + 1];
+    }
     internal IEnumerable<Curve> Curves
     {
         get
@@ -47,9 +56,10 @@ internal sealed class GlowCurveBuilder
             Left = Math.Min(Left, points[i].X);
             Top = Math.Min(Top, points[i].Y);
         }
-        // One lookahead point makes the tangent at a sealed boundary stable.
+        // The extra tail allows spatially filtered samples to settle before
+        // sealing a chunk. It does not delay rendering the live endpoint.
         int last = points.Count - (closing ? 2 : 1);
-        while (last > _sealedEnd + ChunkSize)
+        while (last > _sealedEnd + ChunkSize + _lookahead)
         {
             int end = _sealedEnd + ChunkSize;
             Fit(_sealedEnd, end, Forward(_sealedEnd), Backward(end), _completed);
@@ -125,8 +135,8 @@ internal sealed class GlowCurveBuilder
             _parameters[i] = length > 0 ? _parameters[i] / length : (double)i / (count - 1);
         var curve = Generate(first, last, leftTangent, rightTangent, length);
         var (error, split) = Measure(curve, first, last);
-        if (error <= ErrorSquared) { output.Add(curve); return; }
-        if (error <= ErrorSquared * 16)
+        if (error <= _errorSquared) { output.Add(curve); return; }
+        if (error <= _errorSquared * 16)
         {
             for (int iteration = 0; iteration < 4; iteration++)
             {
@@ -140,7 +150,7 @@ internal sealed class GlowCurveBuilder
                 if (!ordered) break;
                 curve = Generate(first, last, leftTangent, rightTangent, length);
                 (error, split) = Measure(curve, first, last);
-                if (error <= ErrorSquared) { output.Add(curve); return; }
+                if (error <= _errorSquared) { output.Add(curve); return; }
             }
         }
         // Both children share a tangent at a smooth join; actual sharp turns
