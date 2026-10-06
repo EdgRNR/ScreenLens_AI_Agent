@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ScreenLens.WinUI.Views.Capture.CaptureToastWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Border x:Name="ToastCard"
+                Background="{ThemeResource AppCardBgBrush}"
+                BorderBrush="{ThemeResource AppCardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="18,12"
+                Opacity="0">
+            <StackPanel Orientation="Horizontal"
+                        Spacing="10"
+                        HorizontalAlignment="Center">
+                <FontIcon Glyph="&#xE73E;"
+                          FontSize="16"
+                          Foreground="{ThemeResource AppTextPrimaryBrush}"
+                          VerticalAlignment="Center" />
+                <TextBlock x:Name="MessageText"
+                           Foreground="{ThemeResource AppTextPrimaryBrush}"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

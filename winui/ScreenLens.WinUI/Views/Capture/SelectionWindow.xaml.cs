@@ -13,6 +13,10 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using Windows.Storage.Streams;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
 
@@ -59,6 +63,8 @@ namespace ScreenLens.WinUI.Views.Capture
         private Point _toolbarDragPositionStart;
         private bool _committingDimensions;
         private bool _cancelCloseRequested;
+        private bool _imageActionBusy;
+        private IRandomAccessStream? _clipboardImageStream;
         private const double MinSize = 8;
 
         private bool _confirmed;
@@ -79,6 +85,9 @@ namespace ScreenLens.WinUI.Views.Capture
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetCursorPos(out NativePoint point);
+
+        [DllImport("user32.dll")]
+        private static extern short GetKeyState(int virtualKey);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -112,6 +121,8 @@ namespace ScreenLens.WinUI.Views.Capture
                 _vm.ThemeModeChanged -= ApplyTheme;
                 _freeformGlow?.Dispose();
                 _freeformGlow = null;
+                _clipboardImageStream?.Dispose();
+                _clipboardImageStream = null;
                 _presentationClosed.TrySetResult(true);
                 _topmostRetryTimer?.Stop();
                 _topmostRetryTimer = null;
@@ -144,6 +155,10 @@ namespace ScreenLens.WinUI.Views.Capture
                         ApplyPresetRegion(r);
                     }
                     EnsureCaptureWindowForeground("Loaded");
+                    // Build the relatively large glow visual tree before the
+                    // first mouse stroke so pointer input is not interrupted
+                    // by lazy path/brush allocation.
+                    DispatcherQueue.TryEnqueue(PrewarmFreeformGlow);
                 }
                 catch (Exception ex)
                 {
@@ -823,6 +838,22 @@ namespace ScreenLens.WinUI.Views.Capture
                 }
                 return;
             }
+            if (e.OriginalSource is not TextBox
+                && (GetKeyState(0x11) & 0x8000) != 0)
+            {
+                if (e.Key == Windows.System.VirtualKey.C)
+                {
+                    _ = RunImageActionAsync(async png => await CopyImageToClipboardAsync(png));
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Windows.System.VirtualKey.S)
+                {
+                    _ = RunImageActionAsync(async png => await SaveImageAsync(png));
+                    e.Handled = true;
+                    return;
+                }
+            }
             if (e.Key == Windows.System.VirtualKey.Escape)
             {
                 CloseAfterHidingOverlay();
@@ -885,13 +916,10 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 try
                 {
+                    PrewarmFreeformGlow();
                     if (_freeformPoints.Count > 0)
                     {
-                        if (_freeformGlow is null)
-                        {
-                            _freeformGlow = new FreeformGlowTrail(FreeformGlowHost);
-                            _freeformGlow.Failed += OnFreeformGlowFailed;
-                        }
+                        if (_freeformGlow is null) return;
                         _freeformGlow.SetWidth(_vm.FreeformGlowWidthPercent / 100);
                         _freeformGlow.SetFinishedDepthEnabled(_vm.FreeformGlowDepthEnabled);
                         _freeformGlow.Update(_freeformPoints, _dragging, _lastPointerPosition);
@@ -912,6 +940,24 @@ namespace ScreenLens.WinUI.Views.Capture
             FreeformLine.Points = points;
             FreeformLine.Visibility = _freeformPoints.Count >= 2
                 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void PrewarmFreeformGlow()
+        {
+            if (_freeformGlow is not null || _freeformGlowUnavailable
+                || !_vm.FreeformGlowActive)
+                return;
+            try
+            {
+                _freeformGlow = new FreeformGlowTrail(FreeformGlowHost);
+                _freeformGlow.Failed += OnFreeformGlowFailed;
+                _freeformGlow.SetWidth(_vm.FreeformGlowWidthPercent / 100);
+                _freeformGlow.SetFinishedDepthEnabled(_vm.FreeformGlowDepthEnabled);
+            }
+            catch (Exception ex)
+            {
+                OnFreeformGlowFailed(ex);
+            }
         }
 
         private void OnFreeformGlowFailed(Exception ex)
@@ -1146,6 +1192,124 @@ namespace ScreenLens.WinUI.Views.Capture
         {
             CommitDimensionEdits();
             _ = ConfirmSelectionAsync();
+        }
+
+        private async void OnCopyImageClick(object sender, RoutedEventArgs e)
+        {
+            if (_confirmed || _sel.Width < MinSize || _sel.Height < MinSize)
+                return;
+            await RunImageActionAsync(CopyImageToClipboardAsync);
+        }
+
+        private async void OnDownloadImageClick(object sender, RoutedEventArgs e)
+        {
+            if (_confirmed || _sel.Width < MinSize || _sel.Height < MinSize)
+                return;
+            await RunImageActionAsync(SaveImageAsync);
+        }
+
+        private async Task CopyImageToClipboardAsync(byte[] png)
+        {
+            var stream = new InMemoryRandomAccessStream();
+            await stream.WriteAsync(png.AsBuffer());
+            stream.Seek(0);
+            var package = new DataPackage
+            {
+                RequestedOperation = DataPackageOperation.Copy,
+            };
+            package.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));
+            Clipboard.SetContent(package);
+            _clipboardImageStream?.Dispose();
+            _clipboardImageStream = stream;
+            await FinishImageActionAsync("图像已复制到剪贴板");
+        }
+
+        private async Task SaveImageAsync(byte[] png)
+        {
+            var picker = new FileSavePicker
+            {
+                SuggestedFileName = $"ScreenLens_{DateTime.Now:yyyyMMdd_HHmmss}",
+                SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+            };
+            picker.FileTypeChoices.Add("PNG 图像", new[] { ".png" });
+            WinRT.Interop.InitializeWithWindow.Initialize(
+                picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            await FileIO.WriteBytesAsync(file, png);
+            await FinishImageActionAsync("图像已保存");
+        }
+
+        private async Task FinishImageActionAsync(string message)
+        {
+            if (_vm.CloseCaptureAfterImageAction)
+            {
+                // 先创建独立提示窗口，再关闭覆盖层；提示窗口延迟显示，
+                // 因而用户看到的是“截图 UI 已退出”之后的成功反馈。
+                App.ShowCaptureToast(message);
+                CloseAfterHidingOverlay();
+                await Task.CompletedTask;
+                return;
+            }
+            ShowCaptureNotice(message, InfoBarSeverity.Success);
+        }
+
+        private async Task RunImageActionAsync(Func<byte[], Task> action)
+        {
+            if (_imageActionBusy) return;
+            _imageActionBusy = true;
+            CommitDimensionEdits();
+            SetImageActionEnabled(false);
+            try
+            {
+                var png = await CaptureSelectionPngAsync();
+                if (png is null || png.Length == 0)
+                {
+                    ShowCaptureNotice("当前没有可用的选区图像", InfoBarSeverity.Warning);
+                    return;
+                }
+                await action(png);
+            }
+            catch (Exception ex)
+            {
+                ShowCaptureError($"图像操作失败：{ex.Message}");
+            }
+            finally
+            {
+                SetImageActionEnabled(true);
+                _imageActionBusy = false;
+            }
+        }
+
+        private async Task<byte[]?> CaptureSelectionPngAsync()
+        {
+            var scaleX = PixelScaleX;
+            var scaleY = PixelScaleY;
+            var px = (int)(_sel.X * scaleX);
+            var py = (int)(_sel.Y * scaleY);
+            var pw = (int)Math.Ceiling(_sel.Width * scaleX);
+            var ph = (int)Math.Ceiling(_sel.Height * scaleY);
+            var maskPolygon = _freeformSelection
+                ? _freeformPoints.Select(p => new Point(
+                    p.X * scaleX - px, p.Y * scaleY - py)).ToArray()
+                : null;
+            return await _shot.CropToPngAsync(px, py, pw, ph, maskPolygon);
+        }
+
+        private void SetImageActionEnabled(bool enabled)
+        {
+            CopyImageBtn.IsEnabled = enabled;
+            DownloadImageBtn.IsEnabled = enabled;
+        }
+
+        private void ShowCaptureNotice(string message, InfoBarSeverity severity)
+        {
+            _feedbackMonitor ??= ResolveFeedbackMonitor();
+            PositionCaptureFeedback();
+            ErrorBar.Message = message;
+            ErrorBar.Severity = severity;
+            ErrorRegion.Visibility = Visibility.Visible;
+            ErrorBar.IsOpen = true;
         }
 
         private void OnReselectClick(object sender, RoutedEventArgs e)

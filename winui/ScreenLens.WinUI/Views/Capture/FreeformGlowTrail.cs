@@ -140,12 +140,6 @@ internal sealed partial class FreeformGlowTrail : IDisposable
         if (points.Count == 0) { Clear(); return; }
         _points = points;
         _dirty = true;
-        if (!_visible)
-        {
-            foreach (var layer in _layers) layer.Visibility = Visibility.Visible;
-            _visible = true;
-        }
-        _root.IsVisible = true;
         SetFinishedDepthVisible(_finishedDepthEnabled && !drawing && points.Count >= 4);
         MoveHead(headPosition);
         if (drawing)
@@ -179,6 +173,12 @@ internal sealed partial class FreeformGlowTrail : IDisposable
                 _tip?.Hide();
             }
         }
+        if (!_visible)
+        {
+            foreach (var layer in _layers) layer.Visibility = Visibility.Visible;
+            _visible = true;
+        }
+        _root.IsVisible = true;
     }
 
     internal void MoveHead(Point point)

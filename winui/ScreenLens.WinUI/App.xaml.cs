@@ -307,6 +307,16 @@ namespace ScreenLens.WinUI
             }
         }
 
+        internal static void ShowCaptureToast(string message)
+        {
+            if (Current is App app)
+            {
+                var toast = new Views.Capture.CaptureToastWindow(message);
+                app.TrackWindow(toast);
+                toast.ShowAfterCaptureWindow();
+            }
+        }
+
         private void TrackWindow(Window window)
         {
             if (!_openWindows.Add(window)) return;

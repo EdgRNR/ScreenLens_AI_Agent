@@ -275,6 +275,18 @@ namespace ScreenLens.WinUI.ViewModels
             }
         }
 
+        /// <summary>复制或保存选区图像成功后自动关闭截图工具条；默认开启。</summary>
+        private bool _closeCaptureAfterImageAction = true;
+        public bool CloseCaptureAfterImageAction
+        {
+            get => _closeCaptureAfterImageAction;
+            set
+            {
+                if (Set(ref _closeCaptureAfterImageAction, value) && !SuppressPersist)
+                    SettingsService.SaveFrontendDebounced(this);
+            }
+        }
+
         // ---------- OCR 与结果 ----------
         /// <summary>0 = 跟随截图位置，1 = 屏幕居中，2 = 记住上次位置</summary>
         private int _resultPosition;

@@ -109,29 +109,44 @@
                 <Button Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
                         Height="36" VerticalAlignment="Center"
                         BorderThickness="0" Padding="10,8"
-                        Click="OnConfirmClick">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <SymbolIcon Symbol="Accept" />
-                        <TextBlock Text="识别 (Enter)" VerticalAlignment="Center" />
-                    </StackPanel>
+                        Click="OnConfirmClick"
+                        ToolTipService.ToolTip="识别（Enter）"
+                        AutomationProperties.Name="识别（Enter）">
+                    <SymbolIcon Symbol="Accept" />
+                </Button>
+                <Button x:Name="CopyImageBtn"
+                        Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
+                        Height="36" VerticalAlignment="Center"
+                        BorderThickness="0" Padding="10,8"
+                        Click="OnCopyImageClick"
+                        ToolTipService.ToolTip="复制图像（Ctrl+C）"
+                        AutomationProperties.Name="复制图像（Ctrl+C）">
+                    <FontIcon Glyph="&#xE8C8;" />
+                </Button>
+                <Button x:Name="DownloadImageBtn"
+                        Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
+                        Height="36" VerticalAlignment="Center"
+                        BorderThickness="0" Padding="10,8"
+                        Click="OnDownloadImageClick"
+                        ToolTipService.ToolTip="下载图像（Ctrl+S）"
+                        AutomationProperties.Name="下载图像（Ctrl+S）">
+                    <FontIcon Glyph="&#xE74E;" />
                 </Button>
                 <Button Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
                         Height="36" VerticalAlignment="Center"
                         BorderThickness="0" Padding="10,8"
-                        Click="OnReselectClick">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <SymbolIcon Symbol="Refresh" />
-                        <TextBlock Text="重新选择" VerticalAlignment="Center" />
-                    </StackPanel>
+                        Click="OnReselectClick"
+                        ToolTipService.ToolTip="重新选择"
+                        AutomationProperties.Name="重新选择">
+                    <SymbolIcon Symbol="Refresh" />
                 </Button>
                 <Button Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
                         Height="36" VerticalAlignment="Center"
                         BorderThickness="0" Padding="10,8"
-                        Click="OnCancelClick">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <SymbolIcon Symbol="Cancel" />
-                        <TextBlock Text="取消 (Esc)" VerticalAlignment="Center" />
-                    </StackPanel>
+                        Click="OnCancelClick"
+                        ToolTipService.ToolTip="取消（Esc）"
+                        AutomationProperties.Name="取消（Esc）">
+                    <SymbolIcon Symbol="Cancel" />
                 </Button>
             </StackPanel>
         </Border>

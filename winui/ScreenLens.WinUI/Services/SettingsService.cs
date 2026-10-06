@@ -121,6 +121,8 @@ namespace ScreenLens.WinUI.Services
                         vm.FreeformGlowDepthEnabled = GetBool(prefs, "freeformGlowDepthEnabled", true);
                         vm.ConfirmOnRelease =
                             GetBool(prefs, "confirmOnRelease", true);
+                        vm.CloseCaptureAfterImageAction =
+                            GetBool(prefs, "closeCaptureAfterImageAction", true);
                         vm.ResultPosition = GetInt(prefs, "resultPosition", 0);
                         vm.OriginalFontSize = GetInt(prefs, "fontSize", 1);
                         vm.CopyButtonLook = GetInt(prefs, "copyButtonLook", 0);
@@ -290,6 +292,7 @@ namespace ScreenLens.WinUI.Services
                         ["freeformGlowWidthPercent"] = vm.FreeformGlowWidthPercent,
                         ["freeformGlowDepthEnabled"] = vm.FreeformGlowDepthEnabled,
                         ["confirmOnRelease"] = vm.ConfirmOnRelease,
+                        ["closeCaptureAfterImageAction"] = vm.CloseCaptureAfterImageAction,
                         ["resultPosition"] = vm.ResultPosition,
                         ["fontSize"] = vm.OriginalFontSize,
                         ["copyButtonLook"] = vm.CopyButtonLook,

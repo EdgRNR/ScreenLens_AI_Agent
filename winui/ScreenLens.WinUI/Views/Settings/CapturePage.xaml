@@ -105,6 +105,11 @@
             <ToggleSwitch IsOn="{x:Bind Vm.ConfirmOnRelease, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
+        <controls:SettingCard Icon="&#xE74E;" Title="复制或保存后退出截图" Description="图像复制到剪贴板或保存成功后自动关闭截图工具条，默认开启">
+            <ToggleSwitch IsOn="{x:Bind Vm.CloseCaptureAfterImageAction, Mode=TwoWay}" OnContent="" OffContent=""
+                          AutomationProperties.Name="复制或保存图像成功后退出截图" />
+        </controls:SettingCard>
+
         <controls:SettingCard Icon="&#xE75A;" Title="选区工具条" Description="截图时跟随选区显示的浮动工具条">
             <Button Content="了解工具条行为" Click="OnToolbarHelpClick" />
         </controls:SettingCard>
