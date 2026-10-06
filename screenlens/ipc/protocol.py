@@ -132,7 +132,7 @@ def make_response(req_id: int, *, data: dict | None = None,
 # 常量集合（供两端引用）
 OPS = (
     "Ping", "GetStatus", "GetSettings", "SaveSettings", "RegisterHotkey",
-    "RecognizeImage", "TranslateText", "ListTranslationModels",
+    "RecognizeImage", "TranslateText", "ListTranslationModels", "ResetHotkeys", "SetHotkeyRecording",
     "TestTranslationConnection", "CancelRequest", "Shutdown",
 )
 

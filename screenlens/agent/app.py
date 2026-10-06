@@ -18,8 +18,8 @@ import threading
 import time
 import ctypes
 
-from screenlens.config import Config, validate_config
-from screenlens.hotkey import HotkeyManager
+from screenlens.config import Config, validate_config, DEFAULT_CONFIG
+from screenlens.hotkey import ShortcutRegistry
 from screenlens.ipc.pipe_server import PipeServer
 from screenlens.ipc.protocol import (
     PIPE_NAME,
@@ -77,7 +77,12 @@ def _agent_already_running() -> bool:
 class HeadlessAgent:
     def __init__(self):
         self.config = Config()
-        self.hotkeys = HotkeyManager(self._on_hotkey)
+        self.hotkeys = ShortcutRegistry({
+            action: lambda action=action: self._trigger_shortcut(action)
+            for action in ("capture", *DEFAULT_CONFIG["hotkeys"])
+        })
+        self._shortcut_lock = threading.RLock()
+        self._recording_until = 0.0
         self.frontends = FrontendManager()
         self.workers = WorkerManager()
         self._started_at = time.time()
@@ -106,7 +111,7 @@ class HeadlessAgent:
                 f"配置文件存在以下问题，已回退默认值：\n"
                 f"{self.config.load_error}\n\n"
                 "可打开「设置」重新保存配置。")
-        ok, msg = self.hotkeys.register(self.config.hotkey)
+        ok, msg = self.hotkeys.apply(self._shortcut_values(self.config.as_dict()))
         if not ok:
             startup_notices.append(
                 f"快捷键注册失败：{msg}\n请在「设置」中更换快捷键。")
@@ -185,12 +190,17 @@ class HeadlessAgent:
         except Exception:
             logger.exception("托盘启动失败（代理继续运行）")
 
-    def _on_hotkey(self) -> None:
-        """keyboard 钩子线程调用；直接启动前端，无 Tk 依赖。"""
-        logger.info("收到全局截图快捷键，准备启动 WinUI 截图流程")
-        self._launch_capture()
+    def _trigger_shortcut(self, action):
+        if self._stop.is_set() or time.monotonic() < self._recording_until:
+            return
+        if action == "settings":
+            self.frontends.launch("settings")
+        elif action == "cancel_capture":
+            self.frontends.launch("cancel-capture")
+        else:
+            self._launch_capture({"capture_translate": "translate", "capture_ocr": "ocr"}.get(action, "capture"))
 
-    def _launch_capture(self) -> None:
+    def _launch_capture(self, action="capture") -> None:
         with self._hotkey_mutex:
             if self._stop.is_set():
                 return
@@ -199,7 +209,7 @@ class HeadlessAgent:
                 logger.info("忽略 800ms 内重复触发的截图快捷键")
                 return
             self._last_hotkey_launch = now
-            pid = self.frontends.launch("capture")
+            pid = self.frontends.launch("capture", f"--capture-action={action}")
             if pid is None:
                 self._last_hotkey_launch = 0.0
                 exe = self.frontends.exe_path
@@ -305,22 +315,34 @@ class HeadlessAgent:
             self._op_save_settings(pipe, req_id, data)
 
         elif op == "RegisterHotkey":
-            new_hk = (data.get("hotkey") or "").strip()
-            if not new_hk:
-                raise IpcError("bad_request", "快捷键不能为空")
-            ok, msg = self.hotkeys.try_register(new_hk)
-            if not ok:
-                raise IpcError("hotkey_conflict",
-                               f"{msg}（已保留 {self.config.hotkey}）")
-            old_hk = self.config.hotkey
-            self.config.hotkey = new_hk
-            try:
-                self.config.save()
-            except Exception as e:
-                self.config.hotkey = old_hk
-                self.hotkeys.try_register(old_hk)
-                raise IpcError("internal", f"配置写入失败：{e}") from e
-            self._respond(pipe, req_id, data={"hotkey": new_hk})
+            with self._shortcut_lock:
+                updated = self.config.as_dict()
+                action = data.get("action", "capture")
+                value = data.get("hotkey", "")
+                if action not in ("capture", *DEFAULT_CONFIG["hotkeys"]) or not isinstance(value, str):
+                    raise IpcError("bad_request", "快捷键操作或按键格式不正确")
+                if action == "capture":
+                    updated["hotkey"] = value.strip()
+                else:
+                    updated.setdefault("hotkeys", {})[action] = value.strip()
+                self._save_config_with_shortcuts(updated)
+                self._respond(pipe, req_id, data={"config": self.config.as_dict()})
+
+        elif op == "SetHotkeyRecording":
+            if not isinstance(data.get("active"), bool):
+                raise IpcError("bad_request", "按键录制状态不正确")
+            # A lease prevents a disconnected settings window from permanently
+            # disabling the shortcuts. Recording never starts OCR resources.
+            self._recording_until = time.monotonic() + 300 if data["active"] else 0.0
+            self._respond(pipe, req_id, data={})
+
+        elif op == "ResetHotkeys":
+            with self._shortcut_lock:
+                updated = self.config.as_dict()
+                updated["hotkey"] = DEFAULT_CONFIG["hotkey"]
+                updated["hotkeys"] = dict(DEFAULT_CONFIG["hotkeys"])
+                self._save_config_with_shortcuts(updated)
+                self._respond(pipe, req_id, data={"config": self.config.as_dict()})
 
         elif op == "RecognizeImage":
             self._op_recognize(pipe, req_id, data)
@@ -380,27 +402,37 @@ class HeadlessAgent:
         submitted = data.get("config")
         if not isinstance(submitted, dict):
             raise IpcError("bad_request", "缺少 config 字段")
+        with self._shortcut_lock:
+            # Translation-only saves cannot overwrite a more recent shortcut edit.
+            updated = self.config.as_dict()
+            updated.update(submitted)
+            self._save_config_with_shortcuts(updated)
+        self._respond(pipe, req_id, data={})
+
+    @staticmethod
+    def _shortcut_values(config):
+        extras = config.get("hotkeys", {})
+        if not isinstance(extras, dict):
+            extras = {}
+        return {"capture": config.get("hotkey", DEFAULT_CONFIG["hotkey"]),
+                **DEFAULT_CONFIG["hotkeys"], **extras}
+
+    def _save_config_with_shortcuts(self, submitted):
         errors = validate_config(submitted)
         if errors:
             raise IpcError("config_invalid", "；".join(errors))
-
-        new_hk = submitted.get("hotkey", self.config.hotkey)
-        if new_hk != self.config.hotkey:
-            ok, msg = self.hotkeys.try_register(new_hk)
-            if not ok:
-                raise IpcError("hotkey_conflict",
-                               f"{msg}（已保留 {self.config.hotkey}）")
-        old_hk = self.config.hotkey
+        previous = self.config.as_dict()
+        ok, msg = self.hotkeys.apply(self._shortcut_values(submitted))
+        if not ok:
+            raise IpcError("hotkey_conflict", f"{msg}（已保留原快捷键）")
         try:
             self.config.apply_dict(submitted)
         except Exception as e:
-            if new_hk != old_hk:
-                self.hotkeys.try_register(old_hk)
+            self.hotkeys.apply(self._shortcut_values(previous))
             raise IpcError("internal", f"配置写入失败：{e}") from e
         logger.info("设置已通过 IPC 保存（provider=%s hotkey=%s）",
                     submitted.get("translation", {}).get("provider"),
                     self.config.hotkey)
-        self._respond(pipe, req_id, data={})
 
     def _op_recognize(self, pipe, req_id: int, data: dict) -> None:
         png = read_frame(pipe.read_exact)

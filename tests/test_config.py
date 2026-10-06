@@ -24,7 +24,7 @@ class TestConfig(unittest.TestCase):
     def test_default_created_on_first_load(self):
         cfg = Config(self.path)
         self.assertTrue(os.path.exists(self.path))
-        self.assertEqual(cfg.hotkey, "ctrl+alt+a")
+        self.assertEqual(cfg.hotkey, "ctrl+`")
         self.assertEqual(cfg.translation["provider"], "google_free")
 
     def test_save_and_reload(self):
@@ -38,7 +38,7 @@ class TestConfig(unittest.TestCase):
         with open(self.path, "w", encoding="utf-8") as f:
             f.write("{ this is not json !!!")
         cfg = Config(self.path)
-        self.assertEqual(cfg.hotkey, "ctrl+alt+a")
+        self.assertEqual(cfg.hotkey, "ctrl+`")
 
     def test_partial_user_config_merged(self):
         with open(self.path, "w", encoding="utf-8") as f:
@@ -125,14 +125,14 @@ class TestConfigRobustness(unittest.TestCase):
         cfg = Config(self.path)
         self.assertIsNotNone(cfg.load_error)
         self.assertIn("损坏", cfg.load_error)
-        self.assertEqual(cfg.hotkey, "ctrl+alt+a")
+        self.assertEqual(cfg.hotkey, "ctrl+`")
 
     def test_non_dict_root_reports(self):
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump([1, 2, 3], f)
         cfg = Config(self.path)
         self.assertIsNotNone(cfg.load_error)
-        self.assertEqual(cfg.hotkey, "ctrl+alt+a")
+        self.assertEqual(cfg.hotkey, "ctrl+`")
 
     def test_invalid_values_reported_but_merged(self):
         """非法取值：回退可用默认并给出提示，不崩溃。"""

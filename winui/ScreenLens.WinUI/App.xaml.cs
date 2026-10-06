@@ -34,6 +34,7 @@ namespace ScreenLens.WinUI
         private readonly HashSet<Window> _openWindows = new();
         private Services.SingleInstanceCoordinator? _singleInstance;
         private bool _captureStarting;
+        private bool _captureStartCancelled;
 
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
@@ -147,6 +148,13 @@ namespace ScreenLens.WinUI
 
         private void HandleActivation(string[] args)
         {
+            if (args.Any(a => a.Equals("--cancel-capture", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (_captureStarting) _captureStartCancelled = true;
+                _captureWindow?.CancelFromShortcut();
+                if (_openWindows.Count == 0 && !_captureStarting) ExitIfNoWindows();
+                return;
+            }
             var capture = args.Any(a => a.Equals("--capture",
                     StringComparison.OrdinalIgnoreCase)
                 || a.Equals("/capture", StringComparison.OrdinalIgnoreCase)
@@ -159,8 +167,11 @@ namespace ScreenLens.WinUI
                 {
                     WriteLifecycleLog("截图流程已在运行，激活现有窗口");
                     if (_captureWindow is not null)
+                    {
+                        _captureWindow.SetCaptureAction(CaptureActionFromArgs(args));
                         _captureWindow.EnsureCaptureWindowForeground(
                             "重复截图热键");
+                    }
                     else
                         _resultWindow?.Activate();
                     return;
@@ -186,6 +197,7 @@ namespace ScreenLens.WinUI
         private async Task StartCaptureFlowAsync(string[] args)
         {
             _captureStarting = true;
+            _captureStartCancelled = false;
             WriteLifecycleLog("截图流程开始");
             try
             {
@@ -213,6 +225,12 @@ namespace ScreenLens.WinUI
                     return;
                 }
                 WriteLifecycleLog($"虚拟桌面截图完成：origin=({shot.OriginX},{shot.OriginY}), size={shot.Width}x{shot.Height}");
+                if (_captureStartCancelled)
+                {
+                    shot.ReleasePixels();
+                    RestoreSettingsAfterCapture();
+                    return;
+                }
 
                 // 命令行可选预置选区：--region=x,y,w,h 和 --auto。
                 Windows.Graphics.RectInt32? preset = null;
@@ -238,7 +256,8 @@ namespace ScreenLens.WinUI
                     }
                 }
 
-                _captureWindow = new Views.Capture.SelectionWindow(shot, preset, auto);
+                _captureWindow = new Views.Capture.SelectionWindow(shot, preset, auto,
+                    CaptureActionFromArgs(args));
                 RegisterWindow(_captureWindow);
                 await _captureWindow.PrepareForDisplayAsync();
                 await _captureWindow.ShowForCaptureAsync();
@@ -249,6 +268,11 @@ namespace ScreenLens.WinUI
                 try { _captureWindow?.Close(); }
                 catch { /* 窗口可能尚未完成初始化 */ }
                 _captureWindow = null;
+                if (_captureStartCancelled)
+                {
+                    RestoreSettingsAfterCapture();
+                    return;
+                }
                 WriteLifecycleLog($"截图流程异常：{ex.GetType().Name}: {ex.Message}");
                 WriteLog("CaptureFlow", ex);
                 ShowCaptureFailure($"截图流程启动失败：{ex.Message}");
@@ -256,7 +280,15 @@ namespace ScreenLens.WinUI
             finally
             {
                 _captureStarting = false;
+                if (_captureStartCancelled) ExitIfNoWindows();
             }
+        }
+
+        private static string CaptureActionFromArgs(string[] args)
+        {
+            var action = args.FirstOrDefault(a => a.StartsWith("--capture-action=",
+                StringComparison.OrdinalIgnoreCase))?.Split('=', 2)[1];
+            return action is "translate" or "ocr" ? action : "capture";
         }
 
         private async Task<string?> LoadSettingsAsync()

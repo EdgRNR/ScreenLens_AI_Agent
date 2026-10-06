@@ -43,7 +43,7 @@ namespace ScreenLens.WinUI.ViewModels
 
         // ================================================== 后端字段（Python 配置）
 
-        private string _hotkeyText = "Ctrl + Alt + A";
+        private string _hotkeyText = "Ctrl + `";
         /// <summary>截图快捷键（显示格式）；保存走 RegisterHotkey 通道。</summary>
         public string HotkeyText
         {
@@ -352,16 +352,12 @@ namespace ScreenLens.WinUI.ViewModels
 
         public ObservableCollection<HotkeyEntry> Hotkeys { get; } = new()
         {
-            new HotkeyEntry { Icon = "\uE722", Action = "截图并翻译", Description = "启动区域截图，识别后立即翻译", Keys = "Ctrl + Alt + A", Editable = true },
-            new HotkeyEntry { Icon = "\uE8A5", Action = "截图并识别", Description = "仅识别选区文字，不进行翻译", Keys = "—", Editable = false },
-            new HotkeyEntry { Icon = "\uE713", Action = "打开设置", Description = "打开 ScreenLens 设置窗口", Keys = "—", Editable = false },
-            new HotkeyEntry { Icon = "\uE7E7", Action = "退出截图", Description = "取消进行中的截图并关闭遮罩", Keys = "Esc", Editable = false },
+            new HotkeyEntry { Id = "capture", Icon = "\uE722", Action = "截图", Description = "选择截图区域，打开截图工具条", Keys = "Ctrl + `" },
+            new HotkeyEntry { Id = "capture_translate", Icon = "\uE8C1", Action = "截图并翻译", Description = "选择区域后自动识别文字并翻译", Keys = "—" },
+            new HotkeyEntry { Id = "capture_ocr", Icon = "\uE8A5", Action = "截图并识别", Description = "选择区域后自动识别文字", Keys = "—" },
+            new HotkeyEntry { Id = "settings", Icon = "\uE713", Action = "打开设置", Description = "打开 ScreenLens 设置窗口", Keys = "—" },
+            new HotkeyEntry { Id = "cancel_capture", Icon = "\uE7E7", Action = "退出截图", Description = "关闭截图界面并取消正在进行的识别", Keys = "Esc" },
         };
-
-        public void ResetHotkeys()
-        {
-            Hotkeys[0].Keys = "Ctrl + Alt + A";
-        }
 
         // ---------- 轻量提示 ----------
 

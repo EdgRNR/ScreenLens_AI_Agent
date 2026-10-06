@@ -68,7 +68,7 @@
                     <InfoBar IsOpen="True" IsClosable="False" Severity="Success" Title="识别完成" Message="识别到 3 行文本" />
                 </StackPanel>
                 <TextBlock Style="{StaticResource SampleMonoText}" xml:space="preserve">ScreenLens —— 屏幕翻译小工具
-快捷键：Ctrl + Alt + A 启动截图翻译
+默认快捷键：Ctrl + ` 启动截图
 Esc 取消本次截图</TextBlock>
                 <TextBlock Text="以上为静态示例，不代表真实识别结果。" Style="{StaticResource DemoNoteText}" />
             </StackPanel>

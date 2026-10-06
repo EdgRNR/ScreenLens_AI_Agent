@@ -80,7 +80,7 @@ class FrontendManager:
         收到激活请求，而不是静默忽略重复热键。
         """
         mode = (args[0] if args else "settings").lstrip("-/").lower()
-        mode_arg = "--capture" if mode == "capture" else "--settings"
+        mode_arg = {"capture": "--capture", "cancel-capture": "--cancel-capture"}.get(mode, "--settings")
         extra_args = list(args[1:]) if args else []
         exe = self.exe_path
         if not exe:
@@ -88,16 +88,8 @@ class FrontendManager:
 
         with self._lock:
             self._reap_locked()
-            if mode == "capture":
-                # 截图选区/结果窗口由这个前端进程持有。用户在流程结束前
-                # 再按热键时，不能再创建第二个 WinUI 进程；这也为 VS 直接
-                # 启动的前端与 Agent 热键并发触发提供了第二道去重保护。
-                active = next((pid for pid, info in self._procs.items()
-                               if info["mode"] == "capture"), None)
-                if active is not None:
-                    logger.info("截图流程仍由前端进程运行，忽略重复启动 pid=%s",
-                                active)
-                    return active
+            # WinUI's single-instance coordinator forwards the action to an
+            # existing window. Do not drop a different capture action here.
             try:
                 # Popen 也放在锁内，避免多个键盘回调同时通过上面的存活检查，
                 # 然后各自启动一个 WinUI 子进程。

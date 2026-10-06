@@ -171,7 +171,7 @@ class TestSettingsWindow(unittest.TestCase):
         win._close()
         self.assertEqual(self.applied, [])
         cfg2 = Config(self.path)
-        self.assertEqual(cfg2.hotkey, "ctrl+alt+a")  # 未保存
+        self.assertEqual(cfg2.hotkey, "ctrl+`")  # 未保存
 
     def test_invalid_url_blocked_before_apply(self):
         win = self._make_window(self._apply_ok)
@@ -193,7 +193,7 @@ class TestSettingsWindow(unittest.TestCase):
         win._on_save()
         pump(self.root, 100)
         # 界面回显旧的（仍然生效的）快捷键
-        self.assertEqual(win._hotkey_var.get(), "ctrl+alt+a")
+        self.assertEqual(win._hotkey_var.get(), "ctrl+`")
         win._close()
 
     def test_reset_defaults_fills_ui(self):
@@ -202,7 +202,7 @@ class TestSettingsWindow(unittest.TestCase):
         win._provider_var.set("none")
         win._on_reset_defaults()
         pump(self.root, 50)
-        self.assertEqual(win._hotkey_var.get(), "ctrl+alt+a")
+        self.assertEqual(win._hotkey_var.get(), "ctrl+`")
         self.assertEqual(win._provider_var.get(), "google_free")
         self.assertEqual(self.applied, [])  # 恢复默认不等于保存
         win._close()

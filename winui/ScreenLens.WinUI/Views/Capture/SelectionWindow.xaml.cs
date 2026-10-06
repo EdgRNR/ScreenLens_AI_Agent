@@ -36,6 +36,7 @@ namespace ScreenLens.WinUI.Views.Capture
         private readonly VirtualScreenShot _shot;
         private readonly Windows.Graphics.RectInt32? _presetRegion;
         private readonly bool _autoRecognize;
+        private string _captureAction;
         private readonly GeometryGroup _dimGeometry = new()
         {
             FillRule = FillRule.EvenOdd,
@@ -107,13 +108,15 @@ namespace ScreenLens.WinUI.Views.Capture
         /// <param name="presetRegion">可选：预置选区（虚拟屏物理像素），
         /// 供脚本化调用（--region=x,y,w,h）</param>
         /// <param name="autoRecognize">预置选区后是否立即识别（--auto）</param>
+        /// <param name="captureAction">截图快捷键操作：capture、ocr 或 translate。</param>
         public SelectionWindow(VirtualScreenShot shot,
             Windows.Graphics.RectInt32? presetRegion = null,
-            bool autoRecognize = false)
+            bool autoRecognize = false, string captureAction = "capture")
         {
             _shot = shot;
             _presetRegion = presetRegion;
             _autoRecognize = autoRecognize;
+            _captureAction = captureAction;
             _freeformSelection = _vm.LeftCaptureMode == 1;
             InitializeComponent();
             Closed += (_, _) =>
@@ -805,7 +808,7 @@ namespace ScreenLens.WinUI.Views.Capture
                 ApplySelection();
                 return;
             }
-            if (_vm.ConfirmOnRelease)
+            if (_captureAction == "capture" && _vm.ConfirmOnRelease)
             {
                 ShowToolbar();
             }
@@ -869,6 +872,17 @@ namespace ScreenLens.WinUI.Views.Capture
         }
 
         // -------------------------------------------------------- 选区渲染
+
+        internal void SetCaptureAction(string action)
+        {
+            if (!_confirmed) _captureAction = action;
+        }
+
+        internal void CancelFromShortcut()
+        {
+            if (_confirmed) _ = CancelOcrAsync();
+            else CloseAfterHidingOverlay();
+        }
 
         private void ApplySelection()
         {
@@ -1431,7 +1445,7 @@ namespace ScreenLens.WinUI.Views.Capture
                 BusyOverlay.Visibility = Visibility.Collapsed;
 
                 var result = new Views.Result.ResultWindow(resp, screenX, screenY,
-                    pw, ph, this);
+                    pw, ph, this, _captureAction);
                 result.Activate();
                 // 本窗口在结果窗口显示后关闭（进程由结果窗口维持）
                 Close();

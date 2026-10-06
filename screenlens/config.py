@@ -22,7 +22,8 @@ VALID_LANGS = ("zh", "en", "ja")
 
 DEFAULT_CONFIG = {
     # 全局快捷键（keyboard 库格式，可自行修改，例如 "ctrl+alt+s" / "print_screen"）
-    "hotkey": "ctrl+alt+a",
+    "hotkey": "ctrl+`",
+    "hotkeys": {"capture_translate": "", "capture_ocr": "", "settings": "", "cancel_capture": "esc"},
     # 翻译设置
     "translation": {
         # 翻译提供器:
@@ -79,6 +80,16 @@ def validate_config(data) -> list[str]:
         errors.append("快捷键不能为空")
     elif len(hk) > 100:
         errors.append("快捷键格式不正确")
+
+    shortcuts = data.get("hotkeys", {})
+    if not isinstance(shortcuts, dict):
+        errors.append("hotkeys 必须是对象")
+    else:
+        for action, value in shortcuts.items():
+            if action not in DEFAULT_CONFIG["hotkeys"]:
+                errors.append("未知快捷键操作")
+            if not isinstance(value, str) or len(value) > 100:
+                errors.append("快捷键格式不正确")
 
     tr = data.get("translation", {})
     if not isinstance(tr, dict):
@@ -224,5 +235,10 @@ class Config:
                     disk = {}
             if not isinstance(disk, dict):
                 disk = {}
+            previous = self._data
             self._data = _deep_merge(disk, data)
-            self.save()
+            try:
+                self.save()
+            except Exception:
+                self._data = previous
+                raise

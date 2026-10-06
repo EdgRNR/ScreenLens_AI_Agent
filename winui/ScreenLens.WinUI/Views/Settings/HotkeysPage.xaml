@@ -10,12 +10,19 @@
     mc:Ignorable="d"
     NavigationCacheMode="Enabled">
 
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../../Styles/HotkeyDialogResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Page.Resources>
+
     <StackPanel Style="{StaticResource SettingsPagePanel}">
 
         <TextBlock Text="快捷键" Style="{StaticResource PageTitleText}" />
-        <TextBlock Text="第一条「截图并翻译」由后台代理真实注册；其余能力当前版本暂未提供。" Style="{StaticResource PageSubtitleText}" />
 
-        <TextBlock Text="全局快捷键" Style="{StaticResource SectionHeaderText}" />
+        <TextBlock Text="快捷键设置" Style="{StaticResource SectionHeaderText}" />
 
         <ItemsControl ItemsSource="{x:Bind Vm.Hotkeys}">
             <ItemsControl.ItemTemplate>
@@ -38,16 +45,5 @@
         </ItemsControl>
 
         <Button Content="恢复默认快捷键" Click="OnResetHotkeysClick" Margin="0,8,0,0" />
-
-        <Grid Margin="0,12,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
-            <TextBlock Grid.Column="1" Text="提示：编辑快捷键会经命名管道通知后台代理；若被系统或别的程序占用，后台会保留原注册并把原因回显到通知。"
-                       Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" TextWrapping="Wrap" />
-        </Grid>
-
     </StackPanel>
 </Page>

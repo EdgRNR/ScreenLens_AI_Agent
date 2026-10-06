@@ -29,6 +29,7 @@ namespace ScreenLens.WinUI.Views.Result
     {
         private readonly DemoSettings _vm = DemoSettings.Instance;
         private readonly string _ocrText;
+        private readonly string _captureAction;
         private readonly int _screenX;
         private readonly int _screenY;
         private readonly int _regionW;
@@ -53,13 +54,14 @@ namespace ScreenLens.WinUI.Views.Result
 
         public ResultWindow(JsonObject ocrResp, int screenX, int screenY,
             int regionW, int regionH,
-            Views.Capture.SelectionWindow? owner)
+            Views.Capture.SelectionWindow? owner, string captureAction = "capture")
         {
             _screenX = screenX;
             _screenY = screenY;
             _regionW = regionW;
             _regionH = regionH;
             _owner = owner;
+            _captureAction = captureAction;
 
             _ocrText = ocrResp["text"]?.GetValue<string>() ?? "";
             var elapsed = ocrResp["elapsed_ms"]?.GetValue<int>() ?? 0;
@@ -117,6 +119,8 @@ namespace ScreenLens.WinUI.Views.Result
                 Root.Focus(FocusState.Programmatic);
                 UpdateActionLayout();
             };
+            if (_captureAction == "translate")
+                Root.Loaded += OnAutomaticTranslationLoaded;
             Root.SizeChanged += (_, _) => UpdateActionLayout();
             HeaderDragArea.LayoutUpdated += (_, _) => UpdateDragRegion();
         }
@@ -329,6 +333,17 @@ namespace ScreenLens.WinUI.Views.Result
             }
         }
 
+        private void OnAutomaticTranslationLoaded(object sender, RoutedEventArgs e)
+        {
+            Root.Loaded -= OnAutomaticTranslationLoaded;
+            if (_vm.Provider == 2)
+            {
+                ShowStatus("翻译服务已关闭，请在设置中启用。", InfoBarSeverity.Warning);
+                return;
+            }
+            OnTranslateClick(TranslateBtn, e);
+        }
+
         private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
         {
             if (_allowClose || !_translating) return;
@@ -480,7 +495,7 @@ namespace ScreenLens.WinUI.Views.Result
                     shot.ReleasePixels();
                     return;
                 }
-                sel = new Views.Capture.SelectionWindow(shot);
+                sel = new Views.Capture.SelectionWindow(shot, captureAction: _captureAction);
                 await sel.PrepareForDisplayAsync();
                 if (_closed)
                 {

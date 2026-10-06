@@ -6,7 +6,7 @@ using ScreenLens.WinUI.ViewModels;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Windows.System;
-using Windows.Foundation;
+using System;
 
 namespace ScreenLens.WinUI.Views.Settings
 {
@@ -19,19 +19,15 @@ namespace ScreenLens.WinUI.Views.Settings
             InitializeComponent();
         }
 
-        /// <summary>编辑快捷键：仅 Editable=true 的条目接后端 RegisterHotkey。</summary>
-        private void OnEditHotkeyClick(object sender, RoutedEventArgs e)
+        private bool _editing;
+
+        private async void OnEditHotkeyClick(object sender, RoutedEventArgs e)
         {
+            if (_editing) return;
             if (sender is not FrameworkElement { DataContext: HotkeyEntry entry })
             {
                 return;
             }
-            if (!entry.Editable)
-            {
-                Vm.ShowToast($"「{entry.Action}」当前版本未提供编辑能力。");
-                return;
-            }
-
             string? capturedKeys = null;
             var input = new TextBox
             {
@@ -46,20 +42,24 @@ namespace ScreenLens.WinUI.Views.Settings
                 Title = $"编辑快捷键 — {entry.Action}",
                 Content = input,
                 PrimaryButtonText = "保存",
+                SecondaryButtonText = entry.Id == "capture" ? "" : "清除快捷键",
                 CloseButtonText = "取消",
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
+                // A dialog is hosted in a separate popup tree. Resolve its
+                // theme before it appears rather than inheriting it on load.
+                RequestedTheme = ActualTheme,
+                Style = (Style)Resources["HotkeyEditorDialogStyle"],
                 IsPrimaryButtonEnabled = false,
             };
-            input.KeyDown += (_, keyEvent) =>
+            input.PreviewKeyDown += (_, keyEvent) =>
             {
-                // Esc 仍由 ContentDialog 处理为取消。
-                if (keyEvent.Key == VirtualKey.Escape) return;
+                if (keyEvent.Key == VirtualKey.Escape && entry.Id != "cancel_capture") return;
 
                 var combination = BuildHotkeyDisplay(keyEvent.Key);
                 if (combination is null)
                 {
-                    input.Text = "请同时按住 Ctrl、Alt、Shift 或 Win，再按一个键";
+                    input.Text = "请按组合键或 F1–F24";
                     keyEvent.Handled = true;
                     return;
                 }
@@ -71,27 +71,38 @@ namespace ScreenLens.WinUI.Views.Settings
             };
             input.Loaded += (_, _) => input.Focus(FocusState.Programmatic);
 
-            var operation = dialog.ShowAsync();
-            operation.Completed = (info, status) =>
+            _editing = true;
+            try
             {
-                if (status != AsyncStatus.Completed
-                    || info.GetResults() != ContentDialogResult.Primary
-                    || string.IsNullOrWhiteSpace(capturedKeys)) return;
-
-                DispatcherQueue.TryEnqueue(async () =>
+                await BackendClient.Instance.CallAsync("SetHotkeyRecording", new System.Text.Json.Nodes.JsonObject
                 {
-                    var err = await SettingsService.SaveHotkeyAsync(capturedKeys);
-                    if (err is null)
-                    {
-                        Vm.HotkeyText = capturedKeys;
-                        Vm.ShowToast($"已保存「{entry.Action}」快捷键并通知后台代理。");
-                    }
-                    else
-                    {
-                        Vm.ShowToast(err);
-                    }
+                    ["active"] = true,
                 });
-            };
+                var result = await dialog.ShowAsync();
+                if (result == ContentDialogResult.None) return;
+                if (result == ContentDialogResult.Primary && string.IsNullOrEmpty(capturedKeys)) return;
+                var err = await SettingsService.SaveHotkeyAsync(
+                    result == ContentDialogResult.Secondary ? "" : capturedKeys!, entry.Id);
+                if (err is null)
+                {
+                    Vm.ShowToast(result == ContentDialogResult.Secondary
+                        ? $"已清除「{entry.Action}」快捷键" : $"已保存「{entry.Action}」快捷键");
+                }
+                else Vm.ShowToast(err);
+            }
+            catch (Exception ex) { Vm.ShowToast(ex.Message); }
+            finally
+            {
+                try
+                {
+                    await BackendClient.Instance.CallAsync("SetHotkeyRecording", new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["active"] = false,
+                    }, timeoutMs: 2000);
+                }
+                catch { /* The recording lease expires even if the agent disconnects. */ }
+                _editing = false;
+            }
         }
 
         private static string? BuildHotkeyDisplay(VirtualKey key)
@@ -105,7 +116,8 @@ namespace ScreenLens.WinUI.Views.Settings
             if (IsKeyDown(0x10)) parts.Add("Shift");
             if (IsKeyDown(0x12)) parts.Add("Alt");
             if (IsKeyDown(0x5B) || IsKeyDown(0x5C)) parts.Add("Win");
-            if (parts.Count == 0) return null;
+            if (parts.Count == 0 && key != VirtualKey.Escape
+                && virtualKey is not (>= 0x70 and <= 0x87) && virtualKey != 0x2C) return null;
 
             var mainKey = GetKeyboardLibraryName(virtualKey, IsKeyDown(0x10));
             if (mainKey is null) return null;
@@ -130,6 +142,7 @@ namespace ScreenLens.WinUI.Views.Settings
                 0x13 => "Pause",
                 0x14 => "Caps Lock",
                 0x20 => "Space",
+                0x1B => "Esc",
                 0x21 => "Page Up",
                 0x22 => "Page Down",
                 0x23 => "End",
@@ -167,15 +180,15 @@ namespace ScreenLens.WinUI.Views.Settings
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int virtualKey);
 
-        /// <summary>恢复默认：仅作用于第一条真实可编辑的热键。</summary>
         private async void OnResetHotkeysClick(object sender, RoutedEventArgs e)
         {
-            const string defaultKey = "Ctrl + Alt + A";
-            var err = await SettingsService.SaveHotkeyAsync(defaultKey);
+            if (_editing) return;
+            _editing = true;
+            var err = await SettingsService.ResetHotkeysAsync();
+            _editing = false;
             if (err is null)
             {
-                Vm.HotkeyText = defaultKey;
-                Vm.ShowToast("已恢复默认快捷键（其余条目当前版本暂未提供）。");
+                Vm.ShowToast("已恢复默认快捷键");
             }
             else
             {

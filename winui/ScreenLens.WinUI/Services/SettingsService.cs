@@ -164,8 +164,8 @@ namespace ScreenLens.WinUI.Services
 
         private static void ApplyBackendToVm(DemoSettings vm, JsonObject cfg)
         {
-            vm.HotkeyText = KeyboardToDisplay(
-                cfg["hotkey"]?.GetValue<string>() ?? "ctrl+alt+a");
+            if (cfg.ContainsKey("hotkey"))
+                ApplyHotkeys(vm, cfg);
 
             var tr = cfg["translation"]?.AsObject();
             if (tr is null) return;
@@ -199,7 +199,6 @@ namespace ScreenLens.WinUI.Services
         {
             var config = new JsonObject
             {
-                ["hotkey"] = DisplayToKeyboard(vm.HotkeyText),
                 ["translation"] = new JsonObject
                 {
                     ["provider"] = ProviderKeys[vm.Provider],
@@ -229,15 +228,18 @@ namespace ScreenLens.WinUI.Services
         }
 
         /// <summary>热键变更走独立通道（注册成功才算数）。</summary>
-        public static async Task<string?> SaveHotkeyAsync(string newHotkey)
+        public static async Task<string?> SaveHotkeyAsync(string newHotkey, string action = "capture")
         {
+            await _backendSaveMutex.WaitAsync();
             try
             {
-                await BackendClient.Instance.CallAsync("RegisterHotkey",
+                var resp = await BackendClient.Instance.CallAsync("RegisterHotkey",
                     new JsonObject
                     {
+                        ["action"] = action,
                         ["hotkey"] = DisplayToKeyboard(newHotkey),
                     });
+                ApplyHotkeys(DemoSettings.Instance, resp["config"]!.AsObject());
                 return null;
             }
             catch (BackendException e)
@@ -248,6 +250,31 @@ namespace ScreenLens.WinUI.Services
             {
                 return $"后台代理不可用（{e.Message}）";
             }
+            finally { _backendSaveMutex.Release(); }
+        }
+
+        private static void ApplyHotkeys(DemoSettings vm, JsonObject cfg)
+        {
+            vm.HotkeyText = KeyboardToDisplay(cfg["hotkey"]?.GetValue<string>() ?? "ctrl+`");
+            foreach (var entry in vm.Hotkeys.Where(e => e.Id != "capture"))
+            {
+                var key = cfg["hotkeys"]?[entry.Id]?.GetValue<string>()
+                    ?? (entry.Id == "cancel_capture" ? "esc" : "");
+                entry.Keys = string.IsNullOrEmpty(key) ? "—" : KeyboardToDisplay(key);
+            }
+        }
+
+        public static async Task<string?> ResetHotkeysAsync()
+        {
+            await _backendSaveMutex.WaitAsync();
+            try
+            {
+                var resp = await BackendClient.Instance.CallAsync("ResetHotkeys", null);
+                ApplyHotkeys(DemoSettings.Instance, resp["config"]!.AsObject());
+                return null;
+            }
+            catch (Exception ex) { return ex.Message; }
+            finally { _backendSaveMutex.Release(); }
         }
 
         /// <summary>后端字段防抖保存（属性变更时调用，500ms 合并）。</summary>
@@ -328,7 +355,12 @@ namespace ScreenLens.WinUI.Services
                     var normalized = part.Trim().ToLowerInvariant();
                     // keyboard 库的  键名为 ；配置串也用 + 分隔，
                     // 所以 UI 录制时用 Plus 表示，再在这里映射到其别名。
-                    return normalized == "plus" ? "add" : normalized;
+                    return normalized switch
+                    {
+                        "plus" => "add",
+                        "," => "comma", // A literal comma is a sequence separator in keyboard.
+                        _ => normalized,
+                    };
                 }));
 
         /// <summary>"ctrl+alt+a" → "Ctrl + Alt + A"（界面显示格式）。</summary>
@@ -340,6 +372,7 @@ namespace ScreenLens.WinUI.Services
             for (var i = 0; i < parts.Length; i++)
             {
                 var p = parts[i].Trim();
+                if (p.Equals("comma", StringComparison.OrdinalIgnoreCase)) p = ",";
                 outParts[i] = p.Length <= 1
                     ? p.ToUpperInvariant()
                     : char.ToUpperInvariant(p[0]) + p[1..];
@@ -373,7 +406,6 @@ namespace ScreenLens.WinUI.Services
             {
                 var config = new JsonObject
                 {
-                    ["hotkey"] = DisplayToKeyboard(vm.HotkeyText),
                     ["translation"] = translation.DeepClone(),
                 };
                 await BackendClient.Instance.CallAsync("SaveSettings", new JsonObject { ["config"] = config });
