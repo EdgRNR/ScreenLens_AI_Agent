@@ -32,17 +32,28 @@
         </StackPanel>
 
         <TextBlock Text="版本" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="Version" Title="当前版本" Description="WinUI 前端 + Python 后台代理">
-            <Button Content="检查更新" Click="OnCheckUpdateClick" />
-        </controls:SettingCard>
+        <Border Style="{StaticResource SettingCardBorderStyle}" MinHeight="68">
+            <Grid ColumnSpacing="16" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <PathIcon Data="{Binding Source={StaticResource IconVersion}, Converter={StaticResource SettingsIconGeometryConverter}, ConverterParameter=18}"
+                          Width="18" Height="18" VerticalAlignment="Center"
+                          Foreground="{ThemeResource AppTextSecondaryBrush}" />
+                <TextBlock Grid.Column="1" Text="当前版本" Style="{StaticResource CardTitleText}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="v1.0.0" Style="{StaticResource CardTitleText}"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
 
         <TextBlock Text="项目" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="Code" Title="开源项目" Description="GitHub 仓库链接（占位，尚未发布）">
-            <HyperlinkButton Content="github.com/…/ScreenLens" Click="OnProjectLinkClick" />
-        </controls:SettingCard>
-
-        <controls:SettingCard Icon="Stack" Title="技术栈" Description="WinUI 3 · Windows App SDK · XAML 原生控件；OCR 本地 RapidOCR；翻译可选 Google 免费 / OpenAI 兼容">
-            <HyperlinkButton Content="查看开发文档" Click="OnProjectLinkClick" />
+        <controls:SettingCard Icon="Code" Title="开源项目" Description="在 GitHub 查看项目源码">
+            <HyperlinkButton Content="EdgRNR/ScreenLens_AI_Agent"
+                             NavigateUri="https://github.com/EdgRNR/ScreenLens_AI_Agent"
+                             ToolTipService.ToolTip="https://github.com/EdgRNR/ScreenLens_AI_Agent" />
         </controls:SettingCard>
 
         <TextBlock Text="声明" Style="{StaticResource SectionHeaderText}" />
