@@ -8,8 +8,10 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <ResourceDictionary Source="Styles/ThemeResources.xaml" />
+                <ResourceDictionary Source="ms-appx:///Styles/ThemeResources.xaml" />
+                <ResourceDictionary Source="ms-appx:///Styles/Icons.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <SettingsIconGeometryConverter xmlns="using:ScreenLens.WinUI.Controls" x:Key="SettingsIconGeometryConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

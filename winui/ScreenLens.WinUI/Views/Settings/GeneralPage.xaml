@@ -15,7 +15,7 @@
         <TextBlock Text="应用主题与启动行为" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="主题" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE790;" Title="主题模式" Description="选择应用外观，切换后立即在当前窗口预览">
+        <controls:SettingCard Icon="Theme" Title="主题模式" Description="选择应用外观，切换后立即在当前窗口预览">
             <ComboBox SelectedIndex="{x:Bind Vm.ThemeMode, Mode=TwoWay}" MinWidth="160">
                 <ComboBoxItem Content="跟随系统" />
                 <ComboBoxItem Content="浅色" />
@@ -24,17 +24,17 @@
         </controls:SettingCard>
 
         <TextBlock Text="启动" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE7E8;" Title="开机自动启动" Description="登录 Windows 后自动运行后台托盘，不提前加载识别引擎" IsEnabled="{x:Bind Vm.CanEditStartup, Mode=OneWay}">
+        <controls:SettingCard Icon="Power" Title="开机自动启动" Description="登录 Windows 后自动运行后台托盘，不提前加载识别引擎" IsEnabled="{x:Bind Vm.CanEditStartup, Mode=OneWay}">
             <ToggleSwitch IsOn="{x:Bind Vm.LaunchAtStartup, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE923;" Title="启动时仅显示托盘" Description="开启后启动时不打开设置；关闭后启动时显示设置窗口" IsEnabled="{x:Bind Vm.CanEditStartup, Mode=OneWay}">
+        <controls:SettingCard Icon="TrayOnly" Title="启动时仅显示托盘" Description="开启后启动时不打开设置；关闭后启动时显示设置窗口" IsEnabled="{x:Bind Vm.CanEditStartup, Mode=OneWay}">
             <ToggleSwitch IsOn="{x:Bind Vm.StartMinimized, Mode=TwoWay}"
                           OnContent="" OffContent="" />
         </controls:SettingCard>
 
         <TextBlock Text="语言" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xF2B7;" Title="界面语言" Description="当前版本暂仅提供简体中文">
+        <controls:SettingCard Icon="Globe" Title="界面语言" Description="当前版本暂仅提供简体中文">
             <Button Content="了解可用语言" Click="OnPendingClick" />
         </controls:SettingCard>
 
@@ -43,7 +43,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+            <PathIcon Data="{Binding Source={StaticResource IconInfo}, Converter={StaticResource SettingsIconGeometryConverter}, ConverterParameter=14}" Width="14" Height="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
             <TextBlock Grid.Column="1" Text="启动选项自动保存，下次启动生效。主动打开设置或截图不受影响。"
                        Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" TextWrapping="Wrap" />
         </Grid>

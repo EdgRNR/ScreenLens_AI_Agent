@@ -32,16 +32,16 @@
         </StackPanel>
 
         <TextBlock Text="版本" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE8FD;" Title="当前版本" Description="WinUI 前端 + Python 后台代理">
+        <controls:SettingCard Icon="Version" Title="当前版本" Description="WinUI 前端 + Python 后台代理">
             <Button Content="检查更新" Click="OnCheckUpdateClick" />
         </controls:SettingCard>
 
         <TextBlock Text="项目" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE943;" Title="开源项目" Description="GitHub 仓库链接（占位，尚未发布）">
+        <controls:SettingCard Icon="Code" Title="开源项目" Description="GitHub 仓库链接（占位，尚未发布）">
             <HyperlinkButton Content="github.com/…/ScreenLens" Click="OnProjectLinkClick" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE9D9;" Title="技术栈" Description="WinUI 3 · Windows App SDK · XAML 原生控件；OCR 本地 RapidOCR；翻译可选 Google 免费 / OpenAI 兼容">
+        <controls:SettingCard Icon="Stack" Title="技术栈" Description="WinUI 3 · Windows App SDK · XAML 原生控件；OCR 本地 RapidOCR；翻译可选 Google 免费 / OpenAI 兼容">
             <HyperlinkButton Content="查看开发文档" Click="OnProjectLinkClick" />
         </controls:SettingCard>
 

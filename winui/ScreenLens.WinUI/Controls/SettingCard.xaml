@@ -51,12 +51,12 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <FontIcon
+                <PathIcon
                     x:Name="CardIcon"
                     Grid.Row="0"
                     Grid.Column="0"
-                    Glyph="{x:Bind Icon, Mode=OneWay}"
-                    FontSize="18"
+                    Data="{x:Bind IconGeometry(Icon), Mode=OneWay}"
+                    Width="18" Height="18"
                     Foreground="{ThemeResource AppTextSecondaryBrush}"
                     VerticalAlignment="Center" />
 

@@ -371,11 +371,11 @@ namespace ScreenLens.WinUI.ViewModels
 
         public ObservableCollection<HotkeyEntry> Hotkeys { get; } = new()
         {
-            new HotkeyEntry { Id = "capture", Icon = "\uE722", Action = "截图", Description = "选择截图区域，打开截图工具条", Keys = "Ctrl + `" },
-            new HotkeyEntry { Id = "capture_translate", Icon = "\uE8C1", Action = "截图并翻译", Description = "选择区域后自动识别文字并翻译", Keys = "—" },
-            new HotkeyEntry { Id = "capture_ocr", Icon = "\uE8A5", Action = "截图并识别", Description = "选择区域后自动识别文字", Keys = "—" },
-            new HotkeyEntry { Id = "settings", Icon = "\uE713", Action = "打开设置", Description = "打开 ScreenLens 设置窗口", Keys = "—" },
-            new HotkeyEntry { Id = "cancel_capture", Icon = "\uE7E7", Action = "退出截图", Description = "关闭截图界面并取消正在进行的识别", Keys = "Esc" },
+            new HotkeyEntry { Id = "capture", Icon = "Capture", Action = "截图", Description = "选择截图区域，打开截图工具条", Keys = "Ctrl + `" },
+            new HotkeyEntry { Id = "capture_translate", Icon = "CaptureTranslate", Action = "截图并翻译", Description = "选择区域后自动识别文字并翻译", Keys = "—" },
+            new HotkeyEntry { Id = "capture_ocr", Icon = "Document", Action = "截图并识别", Description = "选择区域后自动识别文字", Keys = "—" },
+            new HotkeyEntry { Id = "settings", Icon = "General", Action = "打开设置", Description = "打开 ScreenLens 设置窗口", Keys = "—" },
+            new HotkeyEntry { Id = "cancel_capture", Icon = "Close", Action = "退出截图", Description = "关闭截图界面并取消正在进行的识别", Keys = "Esc" },
         };
 
         // ---------- 轻量提示 ----------

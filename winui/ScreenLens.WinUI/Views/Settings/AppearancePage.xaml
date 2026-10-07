@@ -15,7 +15,7 @@
         <TextBlock Text="设置主题与界面密度" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="主题" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE790;" Title="主题模式" Description="与「通用」页设置联动">
+        <controls:SettingCard Icon="Theme" Title="主题模式" Description="与「通用」页设置联动">
             <ComboBox SelectedIndex="{x:Bind Vm.ThemeMode, Mode=TwoWay}" MinWidth="160">
                 <ComboBoxItem Content="跟随系统" />
                 <ComboBoxItem Content="浅色" />
@@ -24,14 +24,14 @@
         </controls:SettingCard>
 
         <TextBlock Text="密度" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE71C;" Title="卡片密度" Description="切换后立即改变所有设置页卡片的内边距与高度">
+        <controls:SettingCard Icon="Density" Title="卡片密度" Description="切换后立即改变所有设置页卡片的内边距与高度">
             <ComboBox SelectedIndex="{x:Bind Vm.CardDensity, Mode=TwoWay}" MinWidth="140">
                 <ComboBoxItem Content="舒适" />
                 <ComboBoxItem Content="紧凑" />
             </ComboBox>
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE8D9;" Title="界面字号" Description="跟随系统缩放设置，暂不提供独立选项">
+        <controls:SettingCard Icon="TextSize" Title="界面字号" Description="跟随系统缩放设置，暂不提供独立选项">
             <Button Content="了解系统缩放" Click="OnPendingClick" />
         </controls:SettingCard>
 
@@ -40,7 +40,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+            <PathIcon Data="{Binding Source={StaticResource IconInfo}, Converter={StaticResource SettingsIconGeometryConverter}, ConverterParameter=14}" Width="14" Height="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
             <TextBlock Grid.Column="1" Text="主题与卡片密度会自动保存，下次启动继续使用。"
                        Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" />
         </Grid>

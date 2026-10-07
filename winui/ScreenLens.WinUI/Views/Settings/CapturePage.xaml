@@ -39,25 +39,25 @@
         <TextBlock Text="设置鼠标选区方式、背景遮罩与确认行为" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="选区" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE8B6;" Title="鼠标左键选区" Description="按住左键拖动时使用的形状，默认自由圈选">
+        <controls:SettingCard Icon="MouseLeft" Title="鼠标左键选区" Description="按住左键拖动时使用的形状，默认自由圈选">
             <ComboBox SelectedIndex="{x:Bind Vm.LeftCaptureMode, Mode=TwoWay}" MinWidth="160" AutomationProperties.Name="鼠标左键选区方式">
                 <ComboBoxItem Content="矩形选区" />
                 <ComboBoxItem Content="自由圈选" />
             </ComboBox>
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE8B6;" Title="鼠标右键选区" Description="按住右键拖动时使用的形状，默认矩形选区">
+        <controls:SettingCard Icon="MouseRight" Title="鼠标右键选区" Description="按住右键拖动时使用的形状，默认矩形选区">
             <ComboBox SelectedIndex="{x:Bind Vm.RightCaptureMode, Mode=TwoWay}" MinWidth="160" AutomationProperties.Name="鼠标右键选区方式">
                 <ComboBoxItem Content="矩形选区" />
                 <ComboBoxItem Content="自由圈选" />
             </ComboBox>
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE7EF;" Title="自由圈选外接矩形边框" Description="关闭后仅隐藏圈选区域的外接矩形边框，圈选轨迹始终显示；矩形模式不受影响">
+        <controls:SettingCard Icon="SelectionBorder" Title="自由圈选外接矩形边框" Description="关闭后仅隐藏圈选区域的外接矩形边框，圈选轨迹始终显示；矩形模式不受影响">
             <ToggleSwitch IsOn="{x:Bind Vm.FreeformBorderEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="自由圈选外接矩形边框" />
         </controls:SettingCard>
 
-        <controls:SettingCard x:Name="RainbowSettingsCard" Icon="&#xE790;" Title="彩虹圈选" Description="沿自由圈选轨迹显示柔和彩虹光带与暖色光头；关闭后显示普通圈选轨迹&#x0A;仅在关闭“自由圈选外接矩形边框”后可开启，暂停时保留以下偏好。">
+        <controls:SettingCard x:Name="RainbowSettingsCard" Icon="Rainbow" Title="彩虹圈选" Description="沿自由圈选轨迹显示柔和彩虹光带与暖色光头；关闭后显示普通圈选轨迹&#x0A;仅在关闭“自由圈选外接矩形边框”后可开启，暂停时保留以下偏好。">
             <ToggleSwitch x:Name="FreeformGlowSwitch"
                           IsOn="{x:Bind Vm.FreeformGlowActive, Mode=TwoWay}"
                           IsEnabled="{x:Bind Vm.CanEnableFreeformGlow, Mode=OneWay}"
@@ -97,20 +97,20 @@
             </controls:SettingCard.DetailsContent>
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE790;" Title="选区背景黑色遮罩" Description="开启后压暗选区外的画面；关闭后保持截图原始亮度">
+        <controls:SettingCard Icon="DimMask" Title="选区背景黑色遮罩" Description="开启后压暗选区外的画面；关闭后保持截图原始亮度">
             <ToggleSwitch IsOn="{x:Bind Vm.CaptureDimMaskEnabled, Mode=TwoWay}" OnContent="" OffContent="" AutomationProperties.Name="选区背景黑色遮罩" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE8E5;" Title="选区后显示确认工具条" Description="开启：松开鼠标后显示确认 / 取消工具条；关闭：松开鼠标直接开始识别">
+        <controls:SettingCard Icon="ConfirmToolbar" Title="选区后显示确认工具条" Description="开启：松开鼠标后显示确认 / 取消工具条；关闭：松开鼠标直接开始识别">
             <ToggleSwitch IsOn="{x:Bind Vm.ConfirmOnRelease, Mode=TwoWay}" OnContent="" OffContent="" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE74E;" Title="复制或保存后退出截图" Description="图像复制到剪贴板或保存成功后自动关闭截图工具条，默认开启">
+        <controls:SettingCard Icon="CopyComplete" Title="复制或保存后退出截图" Description="图像复制到剪贴板或保存成功后自动关闭截图工具条，默认开启">
             <ToggleSwitch IsOn="{x:Bind Vm.CloseCaptureAfterImageAction, Mode=TwoWay}" OnContent="" OffContent=""
                           AutomationProperties.Name="复制或保存图像成功后退出截图" />
         </controls:SettingCard>
 
-        <controls:SettingCard Icon="&#xE75A;" Title="选区工具条" Description="截图时跟随选区显示的浮动工具条">
+        <controls:SettingCard Icon="Toolbar" Title="选区工具条" Description="截图时跟随选区显示的浮动工具条">
             <Button Content="了解工具条行为" Click="OnToolbarHelpClick" />
         </controls:SettingCard>
 

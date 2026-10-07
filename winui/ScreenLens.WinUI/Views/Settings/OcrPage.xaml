@@ -9,14 +9,14 @@
         <TextBlock Text="OCR 与结果" Style="{StaticResource PageTitleText}" />
         <TextBlock Text="识别结果窗口的位置与文字大小" Style="{StaticResource PageSubtitleText}" />
         <TextBlock Text="结果面板" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE707;" Title="面板出现位置" Description="跟随截图、在截图所在屏幕居中，或记住上次拖动的位置">
+        <controls:SettingCard Icon="ResultPosition" Title="面板出现位置" Description="跟随截图、在截图所在屏幕居中，或记住上次拖动的位置">
             <ComboBox SelectedIndex="{x:Bind Vm.ResultPosition, Mode=TwoWay}" MinWidth="200">
                 <ComboBoxItem Content="跟随截图位置" />
                 <ComboBoxItem Content="截图所在屏幕居中" />
                 <ComboBoxItem Content="记住上次位置" />
             </ComboBox>
         </controls:SettingCard>
-        <controls:SettingCard Icon="&#xE8E9;" Title="结果文字大小" Description="同时调整识别原文和译文，已打开的结果窗口立即生效">
+        <controls:SettingCard Icon="TextSize" Title="结果文字大小" Description="同时调整识别原文和译文，已打开的结果窗口立即生效">
             <ComboBox SelectedIndex="{x:Bind Vm.OriginalFontSize, Mode=TwoWay}" MinWidth="120">
                 <ComboBoxItem Content="小" />
                 <ComboBoxItem Content="中" />

@@ -60,7 +60,7 @@
                 <Style TargetType="NavigationViewItem">
                     <Setter Property="Foreground" Value="{ThemeResource AppTextPrimaryBrush}" />
                 </Style>
-                <Style TargetType="FontIcon">
+                <Style TargetType="PathIcon">
                     <Setter Property="Foreground" Value="{ThemeResource AppTextPrimaryBrush}" />
                 </Style>
             </NavigationView.Resources>
@@ -68,37 +68,37 @@
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="通用" Tag="General" IsSelected="True">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE713;" />
+                        <PathIcon Data="{Binding Source={StaticResource IconGeneral}, Converter={StaticResource SettingsIconGeometryConverter}}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="截图与选区" Tag="Capture">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8B6;" />
+                        <PathIcon Data="{Binding Source={StaticResource IconCapture}, Converter={StaticResource SettingsIconGeometryConverter}}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="OCR 与结果" Tag="Ocr">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8A5;" />
+                        <PathIcon Data="{Binding Source={StaticResource IconDocument}, Converter={StaticResource SettingsIconGeometryConverter}}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="翻译" Tag="Translate">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE774;" />
+                        <PathIcon Data="{Binding Source={StaticResource IconGlobe}, Converter={StaticResource SettingsIconGeometryConverter}}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="快捷键" Tag="Hotkeys">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE765;" />
+                        <PathIcon Data="{Binding Source={StaticResource IconKeyboard}, Converter={StaticResource SettingsIconGeometryConverter}}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="外观" Tag="Appearance">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE790;" />
+                        <PathIcon Data="{Binding Source={StaticResource IconPalette}, Converter={StaticResource SettingsIconGeometryConverter}}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="关于" Tag="About">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE946;" />
+                        <PathIcon Data="{Binding Source={StaticResource IconInfo}, Converter={StaticResource SettingsIconGeometryConverter}}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

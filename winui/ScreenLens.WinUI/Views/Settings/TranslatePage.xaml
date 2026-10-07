@@ -15,7 +15,7 @@
         <TextBlock Text="截图识别文本的翻译服务（设置经命名管道与后台代理同步，保存到本机配置）" Style="{StaticResource PageSubtitleText}" />
 
         <TextBlock Text="目标语言" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE774;" Title="翻译目标语言" Description="识别文本将被翻译为该语言">
+        <controls:SettingCard Icon="Globe" Title="翻译目标语言" Description="识别文本将被翻译为该语言">
             <ComboBox SelectedIndex="{x:Bind Vm.TargetLanguage, Mode=TwoWay}" MinWidth="160">
                 <ComboBoxItem Content="简体中文" />
                 <ComboBoxItem Content="英语" />
@@ -24,7 +24,7 @@
         </controls:SettingCard>
 
         <TextBlock Text="服务商" Style="{StaticResource SectionHeaderText}" />
-        <controls:SettingCard Icon="&#xE703;" Title="翻译服务" Description="Google 免费无需 API Key；OpenAI 兼容支持多家服务商；关闭后截图仅识别不翻译">
+        <controls:SettingCard Icon="Service" Title="翻译服务" Description="Google 免费无需 API Key；OpenAI 兼容支持多家服务商；关闭后截图仅识别不翻译">
             <ComboBox x:Name="ProviderCombo" SelectedIndex="{x:Bind Draft.Provider, Mode=TwoWay}" MinWidth="180">
                 <ComboBoxItem Content="Google 免费" />
                 <ComboBoxItem Content="OpenAI 兼容" />
@@ -69,12 +69,12 @@
                     <Button x:Name="ModelClearBtn" Width="40" Height="40" Padding="0" Margin="0,0,40,0"
                             HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnModelClearClick"
                             Visibility="Collapsed" Style="{StaticResource SettingsIconButtonStyle}">
-                        <FontIcon Glyph="&#xE894;" FontSize="12" />
+                        <PathIcon Data="{Binding Source={StaticResource IconClose}, Converter={StaticResource SettingsIconGeometryConverter}, ConverterParameter=12}" Width="12" Height="12" />
                     </Button>
                     <Button x:Name="ModelDropdownBtn" Width="40" Height="40" Padding="0" Margin="0"
                             HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnModelDropdownClick"
                             Style="{StaticResource SettingsIconButtonStyle}">
-                        <FontIcon Glyph="&#xE70D;" FontSize="12" />
+                        <PathIcon Data="{Binding Source={StaticResource IconChevronDown}, Converter={StaticResource SettingsIconGeometryConverter}, ConverterParameter=12}" Width="12" Height="12" />
                     </Button>
                 </Grid>
 
@@ -98,7 +98,7 @@
         <Border Style="{StaticResource SettingCardBorderStyle}" Padding="16"
                 Visibility="{x:Bind ProviderOffVis(Draft.Provider), Mode=OneWay}">
             <StackPanel Orientation="Horizontal" Spacing="10">
-                <FontIcon Glyph="&#xE7E7;" FontSize="16" Foreground="{ThemeResource AppTextSecondaryBrush}" />
+                <PathIcon Data="{Binding Source={StaticResource IconWarning}, Converter={StaticResource SettingsIconGeometryConverter}, ConverterParameter=16}" Width="16" Height="16" Foreground="{ThemeResource AppTextSecondaryBrush}" />
                 <TextBlock Style="{StaticResource CardDescText}" VerticalAlignment="Center"
                            Text="保存后将关闭翻译：截图仅识别文字，不进行翻译。" />
             </StackPanel>
@@ -119,7 +119,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
+            <PathIcon Data="{Binding Source={StaticResource IconInfo}, Converter={StaticResource SettingsIconGeometryConverter}, ConverterParameter=14}" Width="14" Height="14" Foreground="{ThemeResource AppTextTertiaryBrush}" VerticalAlignment="Top" />
             <TextBlock Grid.Column="1" Text="隐私说明：翻译时仅发送选区内识别到的文本，截图本身不会上传；API Key 仅保存在本机配置文件中。"
                        Style="{StaticResource DemoNoteText}" Margin="6,0,0,0" TextWrapping="Wrap" />
         </Grid>

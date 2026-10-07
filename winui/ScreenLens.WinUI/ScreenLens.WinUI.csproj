@@ -45,6 +45,14 @@
     <Content Update="Assets\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Keep ordinary Run Agent / VS builds on the current merged index too,
+       rather than relying on an older resources.pri left in the output. -->
+  <Target Name="CopyUnpackagedResourceIndex" AfterTargets="Build"
+          Condition="'$(WindowsPackageType)' == 'None' and Exists('$(TargetDir)$(TargetName).pri')">
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pri"
+          DestinationFiles="$(TargetDir)resources.pri" SkipUnchangedFiles="true" />
+  </Target>
+
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>

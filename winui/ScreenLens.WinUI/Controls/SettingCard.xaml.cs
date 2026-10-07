@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Media;
 using ScreenLens.WinUI.ViewModels;
 
 namespace ScreenLens.WinUI.Controls
@@ -103,6 +104,8 @@ namespace ScreenLens.WinUI.Controls
 
         public Visibility DescToVis(string? description)
             => string.IsNullOrWhiteSpace(description) ? Visibility.Collapsed : Visibility.Visible;
+
+        public Geometry? IconGeometry(string name) => SettingsIcons.Get(name, 18);
 
         public Visibility DetailsToVis(object? details)
             => details is null ? Visibility.Collapsed : Visibility.Visible;
