@@ -89,14 +89,35 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="TranslateBtn" Click="OnTranslateClick"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Content="翻译" MinWidth="0" HorizontalAlignment="Stretch" />
-            <Button x:Name="RecaptureBtn" Grid.Column="1" Click="OnRecaptureClick"
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid x:Name="TranslationActions" Grid.ColumnSpan="2" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="TranslateBtn" Click="OnTranslateClick"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Content="翻译" MinWidth="0" Padding="8,5"
+                        HorizontalAlignment="Stretch" />
+                <!-- WinUI reserves 38 DIP on the right for the chevron.
+                     Mirror that space on the left to center the label in the full control. -->
+                <ComboBox x:Name="TargetLanguageBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Center"
+                          Padding="50,5,12,5" VerticalAlignment="Stretch"
+                          AutomationProperties.Name="本次翻译目标语言"
+                          ToolTipService.ToolTip="本次翻译目标语言，不修改设置">
+                    <ComboBoxItem Content="简体中文" Tag="zh" />
+                    <ComboBoxItem Content="英语" Tag="en" />
+                    <ComboBoxItem Content="日语" Tag="ja" />
+                </ComboBox>
+            </Grid>
+            <Button x:Name="RecaptureBtn" Grid.Row="1" Click="OnRecaptureClick"
                     Content="重新截图" MinWidth="0" HorizontalAlignment="Stretch" />
-            <Button x:Name="CopyBtn" Grid.Column="2" Click="OnCopyClick" Content="复制"
+            <Button x:Name="CopyBtn" Grid.Row="1" Grid.Column="1" Click="OnCopyClick" Content="复制"
                     MinWidth="0" HorizontalAlignment="Stretch" />
         </Grid>
     </Grid>

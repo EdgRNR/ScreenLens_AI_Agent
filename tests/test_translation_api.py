@@ -1,5 +1,7 @@
 """Local API fixtures exercise SSE, fallbacks, model discovery and worker framing."""
 import json
+import os
+import tempfile
 import threading
 import time
 import unittest
@@ -8,9 +10,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import Mock, patch
 
 from screenlens.agent.workers import WorkerError, WorkerManager
+from screenlens.config import Config
 from screenlens.translate.openai_compat import OpenAICompatProvider
 from screenlens.translate.provider import TranslationError
-from tests.test_agent_cancellation import _FakeWorker
+from tests.test_agent_cancellation import _FakeWorker, _MemoryPipe
 
 
 class ApiFixture(BaseHTTPRequestHandler):
@@ -145,6 +148,35 @@ class TestTranslationApi(unittest.TestCase):
             self.assertEqual(result["text"], "你好，世界！")
         finally:
             manager.dispose()
+
+
+@unittest.skipUnless(os.name == "nt", "Windows agent IPC")
+class TestTranslationTargetOverride(unittest.TestCase):
+    def test_request_language_overrides_default_without_changing_saved_config(self):
+        from screenlens.agent.app import HeadlessAgent
+
+        with tempfile.TemporaryDirectory() as directory:
+            agent = HeadlessAgent.__new__(HeadlessAgent)
+            agent.config = Config(os.path.join(directory, "config.json"))
+            agent.config.apply_dict({"translation": {"target_language": "en"}})
+            saved = agent.config.as_dict()
+            agent.workers = Mock()
+            agent.workers.run_translate.return_value = {"text": "translated"}
+            with patch.object(agent.config, "_atomic_write") as write:
+                for stream in (False, True):
+                    for target in (None, "zh", "en", "ja"):
+                        with self.subTest(stream=stream, target=target):
+                            data = {"text": "example", "stream": stream}
+                            if target is not None:
+                                data["target_language"] = target
+                            pipe = _MemoryPipe("TranslateText")
+                            agent._dispatch(pipe, {"v": 1, "id": 7,
+                                                   "op": "TranslateText", "data": data})
+                            self.assertEqual(agent.workers.run_translate.call_args.args[2], target or "en")
+                            self.assertEqual(pipe.response()["data"]["text"], "translated")
+                            self.assertEqual(agent.config.as_dict(), saved)
+                write.assert_not_called()
+            self.assertEqual(Config(agent.config.path).as_dict(), saved)
 
 
 class TestTargetedCancellation(unittest.TestCase):

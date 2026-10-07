@@ -45,7 +45,6 @@ namespace ScreenLens.WinUI.Views.Result
         private bool _allowClose;
         private bool _closed;
         private bool _recapturing;
-        private bool? _actionsStacked;
         private InputNonClientPointerSource? _captionPointerSource;
         private RectInt32? _captionRect;
 
@@ -67,6 +66,10 @@ namespace ScreenLens.WinUI.Views.Result
             var elapsed = ocrResp["elapsed_ms"]?.GetValue<int>() ?? 0;
 
             InitializeComponent();
+            // Copy the saved default once. This window's selection is never
+            // bound back to DemoSettings or persisted by SettingsService.
+            TargetLanguageBox.SelectedIndex = Math.Clamp(_vm.TargetLanguage, 0,
+                TargetLanguageBox.Items.Count - 1);
             ApplyTheme(_vm.ThemeMode);
             _vm.ThemeModeChanged += ApplyTheme;
             _vm.PropertyChanged += OnSettingsChanged;
@@ -101,6 +104,7 @@ namespace ScreenLens.WinUI.Views.Result
             {
                 TranslateBtn.IsEnabled = false;
                 TranslateBtn.Content = "翻译已关闭";
+                TargetLanguageBox.IsEnabled = false;
             }
 
             if (_vm.CopyButtonLook == 1)
@@ -117,11 +121,9 @@ namespace ScreenLens.WinUI.Views.Result
             Root.Loaded += (_, _) =>
             {
                 Root.Focus(FocusState.Programmatic);
-                UpdateActionLayout();
             };
             if (_captureAction == "translate")
                 Root.Loaded += OnAutomaticTranslationLoaded;
-            Root.SizeChanged += (_, _) => UpdateActionLayout();
             HeaderDragArea.LayoutUpdated += (_, _) => UpdateDragRegion();
         }
 
@@ -196,30 +198,6 @@ namespace ScreenLens.WinUI.Views.Result
             }
             if (_closed) return;
             Root.RequestedTheme = App.ResolveTheme(mode);
-        }
-
-        private void UpdateActionLayout()
-        {
-            var available = Math.Max(0, Root.ActualWidth - Root.Padding.Left - Root.Padding.Right);
-            if (available == 0) return;
-            var stacked = available < 360;
-            if (_actionsStacked == stacked) return;
-            _actionsStacked = stacked;
-            ActionButtons.ColumnDefinitions.Clear();
-            ActionButtons.RowDefinitions.Clear();
-            for (var i = 0; i < (stacked ? 1 : 3); i++)
-                ActionButtons.ColumnDefinitions.Add(new ColumnDefinition
-                {
-                    Width = new GridLength(1, GridUnitType.Star),
-                });
-            for (var i = 0; i < (stacked ? 3 : 1); i++)
-                ActionButtons.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var buttons = new[] { TranslateBtn, RecaptureBtn, CopyBtn };
-            for (var i = 0; i < buttons.Length; i++)
-            {
-                Grid.SetColumn(buttons[i], stacked ? 0 : i);
-                Grid.SetRow(buttons[i], stacked ? i : 0);
-            }
         }
 
         private static string LinesOf(JsonObject resp)
@@ -330,6 +308,7 @@ namespace ScreenLens.WinUI.Views.Result
             {
                 TranslateBtn.IsEnabled = _vm.Provider != 2;
                 TranslateBtn.Content = _vm.Provider == 2 ? "翻译已关闭" : "翻译";
+                TargetLanguageBox.IsEnabled = _vm.Provider != 2;
             }
         }
 
@@ -415,10 +394,12 @@ namespace ScreenLens.WinUI.Views.Result
 
         private async Task TranslateAsync()
         {
+            var targetLanguage = (TargetLanguageBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "zh";
             using var cancellation = new CancellationTokenSource();
             _translationCancellation = cancellation;
             _translating = true;
             TranslateBtn.Content = "停止翻译";
+            TargetLanguageBox.IsEnabled = false;
             TranslatePanel.Visibility = Visibility.Visible;
             TranslationRow.Height = new GridLength(1, GridUnitType.Star);
             TranslatedText.Text = "";
@@ -431,6 +412,7 @@ namespace ScreenLens.WinUI.Views.Result
                 var resp = await BackendClient.Instance.CallAsync(
                     "TranslateText",
                     new JsonObject { ["text"] = _ocrText, ["stream"] = true,
+                        ["target_language"] = targetLanguage,
                         ["request_token"] = Guid.NewGuid().ToString("N") },
                     timeoutMs: 85_000, ct: cancellation.Token, onDelta: text =>
                     {
@@ -471,6 +453,7 @@ namespace ScreenLens.WinUI.Views.Result
                 {
                     TranslateBtn.IsEnabled = _vm.Provider != 2;
                     TranslateBtn.Content = _vm.Provider == 2 ? "翻译已关闭" : "重新翻译";
+                    TargetLanguageBox.IsEnabled = _vm.Provider != 2;
                 }
             }
         }
