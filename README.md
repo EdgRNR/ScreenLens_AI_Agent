@@ -1,269 +1,342 @@
-# ScreenLens
+<p align="center">
+  <img src="logo.png" width="96" alt="ScreenLens Logo">
+</p>
 
-> 按下快捷键 → 随手圈一下屏幕上的内容 → 自动识别 → 立即复制或翻译。
+<h1 align="center">ScreenLens</h1>
 
-Windows 桌面轻量取词工具：**自由圈选 → 本地 OCR → 复制 / 翻译**。
+<p align="center">自由圈选屏幕内容，本地识别文字，按需复制或翻译。</p>
+<p align="center"><strong>v1.0.0 · Windows x64 · WinUI 3 · 离线 OCR</strong></p>
 
-- 目标平台：Windows 10 / Windows 11
-- 产品形态：常驻托盘的后台工具
-- 核心链路全部离线可用（翻译为可选在线功能）
+ScreenLens 是一款 Windows 桌面截图、文字识别与翻译工具。通过全局快捷键呼出截图界面，使用自由圈选或矩形选区获取内容，再选择复制图像、保存图像或识别文字。识别在本机完成，翻译按需连接所选在线服务。
 
----
+后台托盘负责快捷键和任务调度，设置、截图和结果窗口按需打开；OCR worker 在任务开始时启动，空闲 30 秒后回收。
 
-## 1. 功能总览
+## 目录
+
+- [功能](#功能)
+- [软件截图](#软件截图)
+- [快速开始](#快速开始)
+- [使用说明](#使用说明)
+- [翻译配置](#翻译配置)
+- [从源码运行](#从源码运行)
+- [构建免安装包](#构建免安装包)
+- [架构与项目结构](#架构与项目结构)
+- [配置与隐私](#配置与隐私)
+- [测试](#测试)
+- [常见问题](#常见问题)
+- [反馈与贡献](#反馈与贡献)
+- [许可证与第三方组件](#许可证与第三方组件)
+
+## 功能
 
 | 功能 | 说明 |
-|---|---|
-| 全局快捷键 | 默认 ``Ctrl + ` ``，任何应用中均可呼出，设置窗口中录入修改 |
-| 矩形截图 | 遮罩工具条选「矩形」（默认），左键拖动 |
-| 自由形状圈选 | 遮罩工具条选「自由圈选」，或用 `Ctrl + 左键拖动` / `右键拖动` 临时切换，支持圆形 / 椭圆 / 任意曲线 / 不规则多边形 |
-| 截图反馈 | 拖动中显示选区边框与 `宽 × 高` 尺寸；工具条自动避让选区与屏幕边缘 |
-| 选区确认 | 松开鼠标后按 `Enter` 或点「识别并取词」完成；`Esc` /「取消」放弃；选区过小提示重试 |
-| 本地 OCR | 离线识别中文、英文、中英混合、日文，自动阅读顺序排版 |
-| 结果面板 | 出现在选区旁，含标题栏（状态指示 + 关闭）、识别文字卡片、翻译结果卡片，长文本可滚动 |
-| 一键复制 | 复制原文 / 复制译文，写入剪贴板后校验，失败有提示 |
-| 翻译 | 中 / 英 / 日目标语言可选，Provider 可替换；请求中按钮禁用，防重复提交 |
-| 图形设置窗口 | 托盘菜单「设置」：分组卡片式布局，热键录入、翻译服务、API 配置、目标语言，内联反馈保存结果 |
-| 统一视觉 | 单一主题层（颜色 / 字体 / 间距 / 按钮状态 / 语义状态栏）；设置页跟随系统深浅色 |
-| 系统托盘 | 常驻托盘图标，菜单支持截图 / 设置 / 打开配置 / 重载配置 / 退出 |
-| 错误处理 | 未识别到文字、翻译失败、翻译未启用、API 未配置、配置损坏均有明确提示（图标 + 颜色） |
-| 异步安全 | OCR/翻译在工作线程执行；旧任务迟到结果自动丢弃；窗口关闭/重截图/退出不留悬挂回调 |
-| 键盘可达 | `Enter` 确认选区、`Esc` 取消 / 关闭面板、按钮支持悬停与禁用状态 |
+| --- | --- |
+| 自由圈选与矩形截图 | 默认左键自由圈选、右键矩形选区，两种按键映射均可自定义 |
+| 彩虹圈选 | 可开关彩虹轨迹，调整宽度，选择完成后的光晕与阴影效果 |
+| 截图交互设置 | 自由圈选外接矩形边框、背景黑色遮罩、松开鼠标后的确认行为均可设置 |
+| 图像复制与保存 | 从选区工具条复制图像到剪贴板，或选择路径保存图像 |
+| 本地文字识别 | RapidOCR / PP-OCR 模型与 ONNX Runtime CPU 推理，支持中文、英文、日文及混合文本 |
+| 结果阅读 | 窗口尺寸随文本内容调整，可缩放、最大化；支持原文、译文切换及宽窗口下左右对照 |
+| 在线翻译 | Google 免费接口和 OpenAI 兼容服务；兼容接口支持流式显示、连接测试和模型列表获取 |
+| 临时目标语言 | 结果窗口可单独选择本次翻译语言，不改变设置中的默认目标语言 |
+| 可自定义快捷键 | 截图、截图并识别、截图并翻译、打开设置及退出截图 |
+| 多显示器 | 选区界面覆盖多屏，工具条与结果窗口按屏幕范围定位 |
+| 系统托盘与启动设置 | 当前用户登录时自动启动，以及启动时仅显示托盘 |
+| 外观 | 跟随系统、浅色、深色主题，以及舒适 / 紧凑卡片密度 |
 
-## 2. 安装与运行
+## 软件截图
 
-### 当前开发方式：WinUI 前端 + Python 后台代理
+以下为实际运行的 WinUI v1.0.0 界面截图。OCR 示例来自仓库中的[中英日测试图片](tests/data/ocr_test.png)，由本地 C# OCR worker 实际识别。
 
-开发测试时，先在终端运行 `.venv\Scripts\python.exe run_agent.py`，再从 Visual Studio 按 F5 启动 WinUI 前端。前端只连接已有 Agent；如果后台没启动，设置界面仍可打开并显示未连接状态，不会擅自拉起 Python 进程。
+### 识别结果
 
-### 旧版 Python/Tk 原型运行方式（历史）
+结果窗口展示识别文字，可复制原文、选择本次翻译语言或重新截图。翻译后可切换原文与译文，拉宽窗口后可使用左右对照。
 
-仓库中的 `run_legacy.py`、`run_legacy.pyw` 和 `dist/ScreenLens/ScreenLens.exe` 属于旧版 Python/Tk 原型，不是当前 WinUI 应用入口。
+![ScreenLens 识别结果：本地识别中、英、日混合文本](docs/screenshots/readme/ocr-result.png)
 
-当前 WinUI/Agent 的免安装测试包由 `scripts/build_portable.py` 构建，包含自带运行库的 WinUI、Agent、翻译 worker 和离线 C# OCR worker。解压后运行 `ScreenLens.WinUI.exe`，无需安装 Python 或 .NET；构建与验证步骤见 [便携包说明](docs/PORTABLE.md)。旧 `scripts/build_exe.py` 仍只用于 Tk 原型。
+### 截图与彩虹圈选设置
 
-旧原型源码启动命令（仅用于维护旧版）：
+分别设置左右键选区方式，并调整彩虹轨迹、完成后光晕与阴影、背景遮罩和确认工具条。
+
+![ScreenLens 截图与选区设置](docs/screenshots/readme/capture-settings.png)
+
+### 快捷键设置
+
+为不同操作录入快捷键，也可恢复默认配置。
+
+![ScreenLens 快捷键设置](docs/screenshots/readme/hotkeys.png)
+
+### 关于
+
+查看当前版本，通过仓库链接访问项目源码。
+
+![ScreenLens 关于页面](docs/screenshots/readme/about.png)
+
+## 快速开始
+
+### 使用免安装包
+
+当前提供 Windows x64 免安装包的构建流程，仓库尚未发布 GitHub Releases。现阶段可使用项目构建出的 ZIP，或按[从源码运行](#从源码运行)启动。
+
+拿到免安装 ZIP 后：
+
+1. 将整个压缩包解压到一个固定目录。
+2. 双击 `ScreenLens.WinUI.exe` 打开设置；前端会连接或启动同目录的后台 Agent。
+3. 使用默认快捷键 **Ctrl + 反引号（`）** 开始截图。
+4. 仅需后台托盘时，可以直接运行 `ScreenLensAgent.exe`。
+5. 从托盘菜单选择“退出”，关闭后台程序。
+
+免安装包自带 Python、.NET、Windows App SDK 运行库和离线 OCR 模型，目标设备无需另装 Python 或 .NET。请保留完整目录结构，不要只复制单个 EXE，也不要直接在 ZIP 内运行。
+
+开发版与免安装版使用同一套用户配置。测试免安装包前，请退出开发版 Run Agent 和已打开的 ScreenLens 窗口，避免连接到旧进程。
+
+### 运行环境
+
+- Windows 10 1809（build 17763）及以上 / Windows 11，x64。
+- 图像复制与保存、本地 OCR 不需要网络。
+- 翻译需要网络，以及所选服务要求的连接参数。
+- 当前界面语言为简体中文。
+
+## 使用说明
+
+### 截图、复制与保存
+
+1. 按截图快捷键，或从托盘菜单启动截图。
+2. 使用左键自由圈选，或使用右键拖出矩形；按键映射可在“截图与选区”中修改。
+3. 形成选区后，使用浮动工具条识别、复制图像、保存图像、重新选择或取消。
+4. 鼠标悬停在工具条图标上，可查看功能名称与快捷键。
+
+| 截图界面操作 | 默认按键 |
+| --- | --- |
+| 识别当前选区 | Enter |
+| 复制选区图像 | Ctrl + C |
+| 保存选区图像 | Ctrl + S |
+| 取消截图 / 取消正在进行的识别 | Esc |
+
+“选区后显示确认工具条”关闭时，松开鼠标将直接开始识别。“复制或保存后退出截图”默认开启，成功后先关闭截图界面，再显示提示。
+
+### 彩虹圈选
+
+彩虹效果仅用于自由圈选，需先关闭“自由圈选外接矩形边框”才能开启。关闭外接矩形边框不会隐藏自由圈选轨迹。
+
+- **彩虹圈选**：控制彩虹轨迹效果。
+- **轨迹宽度**：默认 100%，范围为 50%–200%。
+- **完成后光晕与阴影**：松开鼠标后渐入增强效果，可独立关闭。
+
+背景黑色遮罩与彩虹效果可分别设置；矩形选区不使用彩虹轨迹。
+
+### 识别与翻译结果
+
+识别后在结果窗口阅读或复制原文。点击“翻译”使用当前配置的服务；右侧语言下拉框只影响本次结果，初始值来自设置中的默认目标语言。
+
+长文本可滚动阅读。窗口较窄时通过“原文 / 译文”切换；窗口足够宽且已有译文时，可以开启“对照”。结果面板位置与文字大小可在“OCR 与结果”中设置。
+
+### 全局快捷键
+
+| 操作 | 默认配置 |
+| --- | --- |
+| 截图 | Ctrl + 反引号（`） |
+| 截图并识别 | 未绑定，可在设置中录入 |
+| 截图并翻译 | 未绑定，可在设置中录入 |
+| 打开设置 | 未绑定，可在设置中录入 |
+| 退出截图 | Esc |
+
+“截图并识别”在选区完成后自动识别；“截图并翻译”继续执行翻译。普通截图则按当前确认工具条设置操作。
+
+## 翻译配置
+
+从托盘打开设置，进入“翻译”页：
+
+| 服务 | 需要填写的内容 | 特点 |
+| --- | --- | --- |
+| Google 免费 | 无需 API Key | 需要网络；接口可用性受网络及服务变化影响 |
+| OpenAI 兼容 | API 地址、API Key、模型 | 使用兼容服务商或自行部署的兼容接口 |
+| 关闭翻译 | 无 | 仅截图、保存、复制和本地识别 |
+
+使用 OpenAI 兼容服务时：
+
+1. 填写服务商提供的 API 地址，例如 `https://api.openai.com/v1`。
+2. 填写该服务的 API Key。
+3. 输入模型名称，或点击“获取模型”查询接口提供的模型列表。
+4. 使用“测试连接”确认配置可用，再点击“保存并启用”。
+
+不同服务商的地址与模型命名可能不同，请以其说明为准。模型列表取决于服务是否实现兼容的模型查询接口；列表不可用时仍可手动填写模型。
+
+默认翻译目标支持简体中文、英语和日语。OpenAI 兼容翻译会逐步显示流式文本；请求失败会显示错误提示。
+
+## 从源码运行
+
+以下命令在 Windows PowerShell 中执行。
+
+### 开发依赖
+
+- Git。
+- x64 Python；当前开发环境使用 Python 3.13。
+- .NET 8 SDK。
+- Windows SDK 与 WinUI / .NET 桌面构建工具，可通过 Visual Studio 2022 或对应 Build Tools 安装。
+- 首次安装依赖、还原 NuGet 包需要网络。
+
+### 1. 获取代码并安装 Python 依赖
 
 ```powershell
-pip install -r requirements.txt
-python run_legacy.py       # 控制台模式（可看日志）
-python run_legacy.pyw      # 无控制台模式
+git clone https://github.com/EdgRNR/ScreenLens_AI_Agent.git
+cd ScreenLens_AI_Agent
+
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 架构：WinUI 前端 + 后台代理（当前开发形态）
+无需激活虚拟环境，后续命令直接使用 `.venv` 内的解释器。OCR 依赖版本固定为 `rapidocr==3.9.2` 和 `onnxruntime==1.30.0`。
 
-界面由 WinUI 3 前端提供，业务与 OCR 留在 Python 侧，两者以命名管道通信。
-进程各自按需存活，空闲时不驻留重内存：
-
-| 组件 | 职责 | 内存（私有工作集） |
-|---|---|---|
-| 后台代理 `run_agent.py` | 常驻托盘；全局热键、配置读写、命名管道服务、唤起前端。不含 UI 框架，不加载 OCR 模型 | 目标低于 **50 MiB**；须实测确认 |
-| WinUI 前端 `ScreenLens.WinUI.exe` | 设置窗口 / 截图选区 / 结果窗口；窗口关闭后进程退出 | 按需测量，不计入“仅后台空闲”指标 |
-| OCR / 翻译 worker | 任务期间按需启动；空闲 30 秒后退出，OCR 模型随进程退出回收 | 任务期间升高；空闲态不应残留 |
-
-OCR 固定使用 RapidOCR 3.9.2、PP-OCRv6 small 检测/识别模型及 ONNX Runtime CPU 推理。同一 worker 内复用引擎；首次请求仍需加载模型。截图检测采用长边限制，避免把狭长选区按短边过度放大，并对倒置方向判定使用更高置信度门槛。配置、比较结果与复测命令见 [OCR 优化说明](docs/OCR_PIPELINE.md)。
-
-### 用 Visual Studio 启动（推荐）
-
-打开 `winui\ScreenLens.WinUI\ScreenLens.WinUI.slnx`，选择 **x64 / Unpackaged** 后按 F5。
-开发时需先单独运行后台代理，再启动前端：
+### 2. 构建前端与 OCR worker
 
 ```powershell
-.venv\Scripts\python.exe run_agent.py
+dotnet build winui/ScreenLens.WinUI/ScreenLens.WinUI.csproj -c Debug -p:Platform=x64
+.\.venv\Scripts\python.exe scripts/build_ocr_worker.py
 ```
 
-WinUI 会连接已运行的后台代理；关闭设置窗口后，前端退出而托盘代理继续工作；从托盘
-打开设置或按全局热键时，已有 WinUI 实例会被唤起。
+前端输出位于 `winui/ScreenLens.WinUI/bin/x64/Debug/` 下，OCR worker 输出位于 `dist/ocr/`。OCR 构建脚本从已安装的 Python 依赖中复制模型与原生运行库。
 
-只有当正式发布目录将 `ScreenLensAgent.exe` 与 WinUI 放在同一目录时，前端才会自动启动随包代理。也可通过 `SCREENLENS_AGENT_EXE` 显式指定代理，或在开发调试时设置 `SCREENLENS_AUTOSTART_AGENT=1` 选择自动启动。
-
-手动运行后台也方便观察日志：
+### 3. 启动后台
 
 ```powershell
-# 开发调试时单独启动后台
-.venv\Scripts\python.exe run_agent.py
+.\.venv\Scripts\python.exe run_agent.py
 ```
 
-- 前端 exe 定位顺序：环境变量 `SCREENLENS_WINUI_EXE` → 代理同目录（打包布局）→
-  仓库开发布局 `winui\ScreenLens.WinUI\bin\x64\{Debug,Release}\...\ScreenLens.WinUI.exe`
-- IPC 协议（命名管道 v1，仅当前用户可访问，不监听任何 TCP 端口）见
-  `screenlens/ipc/protocol.py`
-- 设置数据边界：热键 / 翻译服务等写入 Python 配置；主题、卡片密度、截图交互等
-  纯前端偏好写入 `%LOCALAPPDATA%\ScreenLens\frontend.json`，互不覆盖
-- 日志：`%LOCALAPPDATA%\ScreenLens\logs\{agent,worker}.log`
+从托盘打开设置或按截图快捷键，Agent 会寻找并启动已构建的 WinUI 前端。开发环境的前端默认连接已有 Agent，请先启动后台。
 
-内存采样会自动统计指定代理及其 worker / WinUI 后代进程；从日志中的代理 PID 开始：
+也可在 Visual Studio 打开 `winui/ScreenLens.WinUI/ScreenLens.WinUI.slnx`，选择 x64 后启动前端。关闭设置或结果窗口不会退出后台托盘。
+
+开发环境优先使用 C# OCR worker；未找到完整 worker 与模型时可回退到 Python OCR。免安装包固定使用随包提供的 C# OCR，不包含 Python OCR 回退依赖。详情见 [OCR worker 文档](docs/OCR_WORKER.md)。
+
+## 构建免安装包
+
+开发依赖准备完成后，在项目根目录执行：
 
 ```powershell
-.venv\Scripts\python.exe scripts\measure_memory.py --root-pid <代理PID> --duration 60 --label 后台空闲
+# 首次打包需安装 PyInstaller
+.\.venv\Scripts\python.exe -m pip install pyinstaller
+
+# 后续一条命令完成构建、验证与压缩
+.\.venv\Scripts\python.exe scripts/build_portable.py
 ```
 
-截图模式的命令行参数（供脚本化调用与自动化验证）：
+脚本构建 Release 前端与 OCR worker，打包 Python Agent 和翻译 worker，复制运行库、模型及第三方说明，并验证程序包。验证通过后才生成 ZIP 与 SHA-256 文件。
 
-```powershell
-ScreenLens.WinUI.exe --capture --region=400,140,900,80 --auto
+```text
+dist/
+├── ScreenLens-portable-win-x64-时间戳/        # 可直接运行的完整文件夹
+├── ScreenLens-portable-win-x64-时间戳.zip     # 便于分发的压缩包
+└── ScreenLens-portable-win-x64-时间戳.zip.sha256
 ```
 
-`--region=x,y,w,h` 为相对虚拟屏幕的物理像素矩形，`--auto` 表示预置选区后立即识别。
+每次使用新目录，不覆盖旧包。构建中间文件和日志位于 `build/`；可使用 `--name` 指定目录名，使用 `--no-restore` 复用已还原的依赖。
 
-> **抓屏能力边界（已知）**：选区截图由 GDI `BitBlt`（`SRCCOPY | CAPTUREBLT`）
-> 从虚拟屏幕 DC 取得，覆盖全部显示器，内存开销低。但带
-> `WS_EX_NOREDIRECTIONBITMAP` 的窗口像素不写入重定向表面，**无法被截取**，
-> 典型如 Microsoft Edge、Windows 设置、Windows Terminal（含其承载的
-> `cmd`）、部分 UWP/WinUI 应用。传统 Win32 窗口、Electron 应用（VS Code、
-> 多数 IDE）以及未启用系统 backdrop 的 WinUI 3 窗口不受影响。
-> 若需覆盖全部窗口，应改用 Windows.Graphics.Capture（WGC）或
-> DXGI Desktop Duplication。
+完整流程、独立验证命令与部署边界见[免安装包文档](docs/PORTABLE.md)。
 
-> **调试开关**：设置环境变量 `SCREENLENS_DEBUG_DUMP=<目录>` 后，前端会把
-> 每次实际发往 OCR 的选区 PNG 落盘，便于定位“识别结果为空”。
-> 未设置该变量时不产生任何文件与额外开销。
+## 架构与项目结构
 
-## 3. 旧版原型打包（非当前 WinUI 发布包）
+| 组件 | 职责 | 生命周期 |
+| --- | --- | --- |
+| WinUI 3 / C# 前端 | 设置、截图选区、图像操作和结果窗口 | 按需启动，窗口全部关闭后退出 |
+| Python Agent | 托盘、全局快捷键、配置与任务调度 | 运行期间常驻 |
+| C# OCR worker | RapidOCR 管线、PP-OCRv6 small 检测 / 识别、方向分类、ONNX Runtime CPU 推理 | 按需启动，空闲 30 秒回收 |
+| Python 翻译 worker | 翻译、流式响应、模型查询与连接测试 | 按需启动，空闲 30 秒回收 |
 
-```powershell
-pip install -r requirements.txt pyinstaller
-python scripts/build_exe.py
-# 输出旧版 Python/Tk 原型 dist/ScreenLens/ScreenLens.exe
+前端与 Agent 使用当前用户限定的 Windows 命名管道通信。Agent 通过带长度帧的标准输入 / 输出与 worker 通信；切换 OCR 与翻译任务时释放前一个 worker，不同时保留两套 worker。
+
+```text
+ScreenLens_AI_Agent/
+├── winui/ScreenLens.WinUI/  # 当前 WinUI 前端
+├── ocr/ScreenLens.Ocr.Worker/ # C# OCR worker 与 RapidOCR 改编实现
+├── screenlens/
+│   ├── agent/              # 后台、快捷键、启动与 worker 管理
+│   ├── ipc/                # 命名管道与帧协议
+│   ├── ocr/                # Python OCR 回退实现
+│   └── worker.py           # Python worker
+├── scripts/                # 构建、验证、测量辅助脚本
+├── tests/                  # 自动化测试与示例图片
+├── docs/                   # 专项文档与真实界面截图
+├── run_agent.py            # 后台入口，带控制台日志
+├── run_agent.pyw           # 后台入口，无控制台
+├── run_worker.py           # 打包翻译 worker 入口
+├── logo.png                # 品牌 Logo
+└── requirements.txt        # Python 依赖
 ```
 
-## 4. 使用说明
+仓库保留了 `run_legacy.py`、`run_legacy.pyw` 与旧 Tk 原型代码。当前桌面应用入口为 WinUI 前端与 Agent；旧 `scripts/build_exe.py` 用于 Tk 原型，当前版本请使用 `scripts/build_portable.py`。
 
-1. 开发调试时先运行 `.venv\Scripts\python.exe run_agent.py`，再在 Visual Studio 按 F5。发布版的自动启动行为待发布打包完成后验收。
-2. 按 ``Ctrl + ` ``，或从托盘菜单启动截图。屏幕冻结后拖动选择区域，按 `Enter` 识别，按 `Esc` 取消。
-3. 默认矩形选区；设置中可选择自由圈选和松开鼠标后的确认行为。
-4. 识别结果窗口可复制文本、调用当前配置的翻译服务、重新截图；关闭设置/结果窗口不会关闭托盘代理。
-5. OpenAI 兼容翻译需要在设置中配置服务地址、模型和 API Key；未配置或请求失败时会显示错误信息。
+## 配置与隐私
 
-## 5. 设置与配置
+| 内容 | 默认位置 |
+| --- | --- |
+| 快捷键、翻译服务、API 参数等 | `%APPDATA%\ScreenLens\config.json` |
+| 主题、截图交互、结果窗口等前端偏好 | `%LOCALAPPDATA%\ScreenLens\frontend.json` |
+| 运行日志 | `%LOCALAPPDATA%\ScreenLens\logs\` |
 
-### 图形设置窗口（推荐）
+建议通过设置页面修改配置。托盘菜单也提供打开配置文件与重载配置的入口。
 
-托盘图标右键 → **设置**，无需手工编辑 JSON：
+- 截图与 OCR 在本地执行，识别图片不上传。
+- 翻译仅发送识别文本及请求所需参数到用户选择的服务。
+- API Key 保存在本机配置文件中；发布包不包含开发者的配置、截图或密钥。
+- 正常业务日志不记录截图、识别正文或 API Key。
+- 关闭翻译后，截图、复制、保存与本地 OCR 可离线使用。
 
-- **快捷键**：点击「录入新快捷键」后直接按下组合键（如 `Ctrl+Alt+S`），保存前自动校验格式；注册失败会自动保留原快捷键并说明原因
-- **翻译服务**：Google 免费接口 / OpenAI 兼容接口 / 关闭翻译
-- **OpenAI 兼容配置**：Base URL、API Key（默认隐藏，可切换显示）、模型
-- **默认目标语言**：中文 / 英文 / 日文
-- **开机自动启动**：默认关闭；启用后注册当前用户的 Windows 登录启动项。开发版使用当前 Python 环境的 `pythonw.exe` 与 `run_agent.pyw`，移动项目或 Python 环境后需重新启用以更新路径。登录启动不会预热 OCR。
-- **启动时仅显示托盘**：默认开启；关闭后正常启动 Agent 时打开设置窗口，与开机自动启动独立。前端主动拉起后台使用 `--background`，不会额外打开设置窗口。
-- **OCR 与结果**：可选择跟随截图、截图所在屏幕居中或记住上次拖动的位置；位置会限制在可用屏幕内。结果文字大小同时作用于原文和译文，默认中号，当前窗口立即更新。
-- **保存并生效**（无需重启）/ **取消** / **恢复默认值**
+开启“开机自动启动”后，会登记当前用户的 Windows 登录启动项。移动程序目录后，应关闭再开启该选项以更新路径；删除程序前可先关闭自启动并从托盘退出。
 
-### 配置文件
-
-配置文件位置：`%APPDATA%\ScreenLens\config.json`（首次运行自动生成，托盘菜单可打开）。
-保存采用临时文件 + 原子替换，不会因写入中断而损坏；读取时自动校验结构，损坏或非法配置会回退默认值并在启动时提示。
-
-```json
-{
-  "startup": {"start_minimized": true},
-  "hotkey": "ctrl+`",
-  "translation": {
-    "provider": "google_free",
-    "target_language": "zh",
-    "openai": {
-      "base_url": "https://api.openai.com/v1",
-      "api_key": "",
-      "model": "gpt-4o-mini"
-    }
-  }
-}
-```
-
-- `hotkey`：keyboard 库格式，如 `ctrl+alt+s`、`print_screen` 等，修改后托盘「重载配置」生效
-- `translation.provider`：
-  - `"google_free"` — 免费谷歌翻译接口，无需 Key（默认）
-  - `"openai"` — 任意 OpenAI 兼容服务（OpenAI / DeepSeek / Gemini 兼容端点 / 本地 Ollama 等），需填写 `openai.base_url` + `openai.api_key` + `openai.model`
-  - `"none"` — 关闭在线翻译，完全离线
-- `target_language`：`zh` / `en` / `ja`（浮窗下拉会临时覆盖）
-- 旧版本配置文件缺少新字段时自动补齐默认值，保持向后兼容
-
-## 6. 技术选型说明
-
-**当前代码形态：WinUI 3（C#）前端 + Python 后台代理 + 按需 OCR/翻译 worker。**
-
-WinUI 负责设置、选区、结果显示与剪贴板；后台代理负责托盘、快捷键、配置和命名管道 IPC；worker 在任务期间加载 OCR/翻译依赖并在空闲后退出。Python/Tkinter 是早期原型实现，下面保留的历史说明不代表当前 WinUI 界面或运行流程。
-
-| 组件 | 当前职责 |
-|---|---|
-| WinUI 3 / C# | 设置窗口、截图遮罩、结果窗口与系统剪贴板 |
-| Python Agent | 托盘、全局热键、配置读写、命名管道服务、按需启动前端 |
-| C# OCR Worker | 构建后优先使用；离线 OCR、按需启动、空闲 30 秒退出 |
-| Python Worker | 翻译任务及未构建 C# worker 时的 OCR 回退 |
-| IPC | 当前用户限定的 Windows 命名管道，带版本号、请求 ID 和长度帧 |
-
-### 6.1 早期 Tkinter 原型记录（历史）
-
-C# OCR worker 的构建、回退与验证步骤见 [OCR_WORKER.md](docs/OCR_WORKER.md)。
-
-本节只记录旧版 Python/Tkinter 原型背景；当前 UI 以 `winui/ScreenLens.WinUI` 为准。
-
-旧版 UI 调研材料仅作历史参考；其中描述的 Tk 控件、交互按钮和运行流程不代表当前 WinUI 版本。旧 Tk 原型截图已清理，避免与当前界面验收图混淆。
-
-当前 WinUI 页面与端到端验收截图见 `docs/screenshots/`；历史计划统一归档在 [`docs/PLAN.md`](docs/PLAN.md)。
-
-## 7. 隐私说明（本地 vs 联网）
-
-| 功能 | 是否联网 |
-|---|---|
-| 截图、矩形/自由圈选 | 完全本地 |
-| OCR 识别 | 完全本地（模型离线打包，不上传任何图片） |
-| 翻译（google_free / openai） | **联网**：仅识别出的"文本"发送到所选服务；截图本身永不上传；浮窗点击翻译时状态栏会明确提示「文本将发送至在线服务：xxx」 |
-| 完全离线使用 | 配置 `"provider": "none"` 即可 |
-
-API Key 仅保存在本机 `config.json`，代码中无任何硬编码密钥。
-
-## 8. 测试说明
+## 测试
 
 运行 Python 自动化测试：
 
 ```powershell
-.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-旧版 Python/Tk 前端的端到端验收脚本仍在仓库中，不能代替当前 WinUI 的手工验收：
+测试覆盖配置、快捷键、IPC、翻译、取消、worker 生命周期及打包路径。真实 C# OCR 测试需要先构建 worker；缺少构建产物时相关测试会跳过。
 
-```powershell
-python scripts/acceptance_phase2.py
-```
+WinUI 窗口交互、多显示器、混合 DPI、真实在线服务与登录自启动仍需在 Windows 设备上实测。便携包自动验证使用本地 HTTP 测试服务验证翻译协议，不依赖个人 API Key。
 
-覆盖范围：
+专项文档：
 
-目前自动化用例主要覆盖 Python 配置、OCR、翻译、IPC 帧协议和 Agent 逻辑；WinUI 窗口、截图交互、多显示器 DPI 与真实在线 API 流程需要在 Windows 桌面环境手工验收。不要把旧测试数量或旧验收脚本结果当作当前 UI 的完整验收结论。
+- [C# OCR worker 构建与验证](docs/OCR_WORKER.md)
+- [OCR 管线与参数](docs/OCR_PIPELINE.md)
+- [免安装包构建与验证](docs/PORTABLE.md)
+- [项目计划与历史记录](docs/PLAN.md)
 
-## 9. 已知问题与限制
+## 常见问题
 
-1. **快捷键冲突检测**：`keyboard` 库为低级键盘钩子，多个程序可同时注册同一快捷键，Windows 本身不互斥，因此无法可靠"检测"冲突。如遇冲突（如 QQ 截图），请在设置窗口更换快捷键。
-2. **管理员窗口**：焦点在提权（管理员）应用中时，普通权限的热键钩子收不到按键——此时需以管理员运行 ScreenLens（Windows 通用限制）。
-3. **google_free** 为非官方接口，可能随时失效；失败时浮窗会提示「翻译失败，请检查网络或服务配置」。追求稳定请配置 `openai` Provider。
-4. **日文识别**：使用 PP-OCR 中日通用模型，常规假名/汉字识别良好，极端艺术字体可能不如专用日文模型。
-5. **打包体积**：免安装测试包携带 WinUI/.NET/Python 运行库、原生 OCR 依赖及离线模型，实际大小以生成的 ZIP 为准；采用目录部署以便按需启动各进程。
-6. **多显示器 / 混合 DPI**：遮罩按虚拟屏幕包围盒铺满；浮动工具条改为按**主显示器**（空闲态）或**选区所在显示器**（选区内）定位与避让，已有自动化布局测试覆盖。但**混合 DPI 缩放（如 100% + 200% 拼接）场景仍未实测**（复现步骤：外接不同缩放比例的第二显示器，在扩展屏上按热键圈选，观察遮罩与工具条位置）。
-7. **截图兼容性**：当前 WinUI 截图由 GDI BitBlt 实现；启用受保护/无重定向表面的应用可能无法被截取，详见前文抓屏边界说明。
-8. **桌面验收**：混合 DPI、多显示器切换、系统缩放和后台托盘唤起需在目标 Windows 设备实测。
-11. **托盘气泡通知**：Windows 通知中心被禁用时气泡可能不显示，会退化为弹窗。
+### 第一次识别为什么更慢？
 
-## 10. 项目结构
+OCR 按需启动，首次任务需要启动进程并加载模型；同一 worker 内会复用引擎。空闲 30 秒回收后，下一次识别会再次初始化。仅打开截图界面不会提前预热 OCR。
 
-仓库顶层目录：
+### 快捷键没有响应怎么办？
 
-```
-ScreenLens_AI_Agent/
-├── screenlens/             # Python Agent、Worker、IPC 与业务模块
-├── winui/                  # WinUI 3 前端与 Visual Studio 项目
-├── tests/                  # 自动化测试
-├── scripts/                # 构建、验收、测量与开发辅助脚本
-├── logo.png                # 品牌 Logo，后台托盘与图标生成共用
-├── docs/
-│   ├── PLAN.md             # 唯一的项目计划、当前状态与历史计划归档
-│   └── screenshots/        # 当前 WinUI 页面与端到端验收截图
-├── run_agent.py            # 当前 Python 后台代理（控制台）
-├── run_agent.pyw           # 当前 Python 后台代理（无控制台）
-├── run_legacy.py           # 旧版 Tk 原型入口（控制台）
-├── run_legacy.pyw          # 旧版 Tk 原型入口（无控制台）
-└── requirements.txt        # Python 依赖
-```
+确认后台托盘正在运行，检查设置中的按键是否与其他软件冲突。开发环境还需确认 WinUI 前端已经构建。普通权限后台与提权应用之间的输入行为可能受 Windows 权限边界影响。
 
-Python/Tk 源码保留为旧版原型；当前 Windows 桌面 UI 开发入口为 WinUI 解决方案。
-后续实施事项统一维护在 [`docs/PLAN.md`](docs/PLAN.md)，避免在 README 和多个计划文件中重复维护。
+### 换电脑后是否需要安装 Python？
+
+完整免安装包不需要；从源码运行则需要 Python、.NET SDK 及构建环境。便携包目前仅支持 Windows x64。
+
+### 翻译失败或获取不到模型怎么办？
+
+检查网络、API 地址、密钥及模型名称，并使用“测试连接”。部分兼容服务不提供模型列表，可手动填写。Google 免费接口也可能因网络或接口变化而不可用。
+
+### 能自动检查更新吗？
+
+当前未实现自动检查或安装更新。后续发布新版时，退出旧版后使用新版完整文件夹；用户配置存放在 AppData 中，通常无需重新填写。
+
+### 有哪些使用边界？
+
+OCR 效果取决于字体、字号、清晰度与排版；模糊、艺术字体或复杂版面可能识别不准。受保护的视频或特殊渲染内容可能无法正常抓取。多显示器与不同缩放比例的组合需要在目标设备上验证。
+
+## 反馈与贡献
+
+欢迎通过 [GitHub Issues](https://github.com/EdgRNR/ScreenLens_AI_Agent/issues) 提交问题或建议，通过 Pull Request 提交改进。
+
+反馈问题时，请说明软件版本、Windows 版本、显示器数量与缩放比例、复现步骤、预期行为和实际结果。截图或日志请先移除密钥及私人内容。
+
+## 许可证与第三方组件
+
+仓库目前尚未指定项目级开源许可证。第三方组件遵循各自许可证，OCR 改编实现的来源与说明见 [RapidOCR NOTICE](ocr/ScreenLens.Ocr.Worker/RapidOCR/NOTICE.md) 和 [LICENSE](ocr/ScreenLens.Ocr.Worker/RapidOCR/LICENSE)。
+
+免安装构建会将第三方许可与依赖版本说明收集到程序包的 `licenses/` 目录。
