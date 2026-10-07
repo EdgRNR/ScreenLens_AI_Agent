@@ -3,7 +3,8 @@
 
 策略：
 - 收到 RecognizeImage / TranslateText 时按需 spawn worker；
-- 任务完成后保留 30 秒供后续任务复用（连续识别-翻译快路径），
+- 任务完成后保留 30 秒供同类任务复用；OCR 与翻译类型切换时先释放
+  前一个 worker，避免两份进程同时常驻。
   30 秒空闲后通知退出，超时强杀——重内存随进程退出彻底回收；
 - 同一时刻只跑一个任务（内部锁串行），并发请求排队；
 - worker 崩溃（EOF）时对上层返回 worker_crashed，下次任务自动重启；
@@ -20,6 +21,7 @@ import threading
 from collections import OrderedDict
 
 from screenlens.ipc.protocol import encode_frame, read_frame
+from screenlens.agent.ocr_worker import native_ocr_command
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +130,8 @@ class WorkerManager:
         self._lock = threading.Lock()       # 任务串行
         self._state_lock = threading.Lock()
         self._worker: _WorkerProc | None = None
+        self._worker_backend: str | None = None
+        self._spawn_command: list[str] | None = None
         self._idle_timer: threading.Timer | None = None
         self._current_cancelled = threading.Event()
         self._active_request_key = None
@@ -183,9 +187,10 @@ class WorkerManager:
 
     def _execute(self, ctrl: dict, binary: bytes | None = None, *, on_delta=None,
                  request_key=None) -> dict:
-        def check_cancelled():
+        def check_cancelled(*, active=False):
             with self._state_lock:
-                cancelled = request_key is not None and request_key in self._cancelled_keys
+                cancelled = (active and self._current_cancelled.is_set() or
+                             request_key is not None and request_key in self._cancelled_keys)
             if cancelled:
                 raise WorkerError("cancelled", "任务已取消")
 
@@ -197,11 +202,11 @@ class WorkerManager:
             self._current_cancelled.clear()
             with self._state_lock:
                 self._active_request_key = request_key
-            check_cancelled()
+            check_cancelled(active=True)
             self._cancel_idle_timer()
             try:
-                w = self._ensure_worker()
-                check_cancelled()
+                w = self._ensure_worker(ctrl.get("op"))
+                check_cancelled(active=True)
                 watchdog = threading.Timer(
                     _TASK_TIMEOUT, self._kill_current)
                 watchdog.daemon = True
@@ -214,7 +219,7 @@ class WorkerManager:
                     while resp.get("event") == "delta":
                         if on_delta is None:
                             raise WorkerError("internal", "非流式任务收到增量响应")
-                        check_cancelled()
+                        check_cancelled(active=True)
                         on_delta((resp.get("data") or {}).get("text") or "")
                         resp = w.read_json()
                     complete = True
@@ -244,14 +249,25 @@ class WorkerManager:
                 self._cancelled_keys.pop(request_key, None)
             self._lock.release()
 
-    def _ensure_worker(self) -> _WorkerProc:
+    def _ensure_worker(self, op=None) -> _WorkerProc:
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        command = native_ocr_command(repo_root) if op == "ocr" else None
+        if (op == "ocr" and command is None and
+                os.environ.get("SCREENLENS_OCR_BACKEND", "auto").lower() == "csharp"):
+            raise WorkerError("ocr_failed", "C# OCR worker 不完整，请运行 scripts/build_ocr_worker.py")
+        backend = "csharp-ocr" if command else "python"
+        command = command or [self._python_executable(), "-m", "screenlens.worker"]
         with self._state_lock:
             w = self._worker
-            if w is not None and not w.dead and w.proc.poll() is None:
+            if (w is not None and not w.dead and w.proc.poll() is None and
+                    self._worker_backend == backend):
                 return w
             self._worker = None
             if w is not None:
                 w.dispose()
+            self._spawn_command = command
+            self._worker_backend = backend
             w = self._spawn()
             self._worker = w
             return w
@@ -272,18 +288,18 @@ class WorkerManager:
         return sys.executable
 
     def _spawn(self) -> _WorkerProc:
-        exe = self._python_executable()
         repo_root = os.path.dirname(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))))
         try:
             proc = subprocess.Popen(
-                [exe, "-m", "screenlens.worker"],
+                self._spawn_command or [self._python_executable(), "-m", "screenlens.worker"],
                 cwd=repo_root,               # 仓库根，保证 -m 找到包
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, close_fds=True)
+                stderr=subprocess.DEVNULL, close_fds=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         except OSError as e:
             raise WorkerError("worker_crashed", f"worker 启动失败: {e}") from e
-        logger.info("worker 已启动 pid=%s", proc.pid)
+        logger.info("worker 已启动 backend=%s pid=%s", self._worker_backend, proc.pid)
         return _WorkerProc(proc)
 
     def _kill_current(self) -> None:
@@ -315,6 +331,10 @@ class WorkerManager:
 
     def _idle_exit(self) -> None:
         with self._state_lock:
+            # A timer already entering its callback when cancelled must not
+            # detach a worker belonging to a newly started task.
+            if self._lock.locked():
+                return
             w, self._worker = self._worker, None
             self._cancel_idle_timer_locked()
         if w is not None:

@@ -185,10 +185,13 @@ WinUI 负责设置、选区、结果显示与剪贴板；后台代理负责托�
 |---|---|
 | WinUI 3 / C# | 设置窗口、截图遮罩、结果窗口与系统剪贴板 |
 | Python Agent | 托盘、全局热键、配置读写、命名管道服务、按需启动前端 |
-| Python Worker | OCR / 翻译任务；闲置后退出以释放模型和依赖内存 |
+| C# OCR Worker | 构建后优先使用；离线 OCR、按需启动、空闲 30 秒退出 |
+| Python Worker | 翻译任务及未构建 C# worker 时的 OCR 回退 |
 | IPC | 当前用户限定的 Windows 命名管道，带版本号、请求 ID 和长度帧 |
 
 ### 6.1 早期 Tkinter 原型记录（历史）
+
+C# OCR worker 的构建、回退与验证步骤见 [OCR_WORKER.md](docs/OCR_WORKER.md)。
 
 本节只记录旧版 Python/Tkinter 原型背景；当前 UI 以 `winui/ScreenLens.WinUI` 为准。
 

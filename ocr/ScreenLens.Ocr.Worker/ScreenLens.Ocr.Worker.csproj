@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OnnxRuntimeNativeDir Condition="'$(OnnxRuntimeNativeDir)' == ''">$(MSBuildThisFileDirectory)../../.venv/Lib/site-packages/onnxruntime/capi</OnnxRuntimeNativeDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Clipper2" Version="2.0.0" />
+    <PackageReference Include="Emgu.CV" Version="4.12.0.5764" />
+    <PackageReference Include="Emgu.CV.runtime.windows" Version="4.12.0.5764" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.30.0" />
+    <None Include="$(OnnxRuntimeNativeDir)/onnxruntime.dll" Link="onnxruntime.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(OnnxRuntimeNativeDir)/onnxruntime_providers_shared.dll" Link="onnxruntime_providers_shared.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckNativeRuntime" BeforeTargets="Build">
+    <Error Condition="!Exists('$(OnnxRuntimeNativeDir)/onnxruntime.dll')" Text="Build with scripts/build_ocr_worker.py to supply ONNX Runtime 1.30.0." />
+  </Target>
+</Project>
