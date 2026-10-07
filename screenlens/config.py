@@ -21,6 +21,7 @@ VALID_PROVIDERS = ("google_free", "openai", "none")
 VALID_LANGS = ("zh", "en", "ja")
 
 DEFAULT_CONFIG = {
+    "startup": {"start_minimized": True},
     # 全局快捷键（keyboard 库格式，可自行修改，例如 "ctrl+alt+s" / "print_screen"）
     "hotkey": "ctrl+`",
     "hotkeys": {"capture_translate": "", "capture_ocr": "", "settings": "", "cancel_capture": "esc"},
@@ -74,6 +75,12 @@ def validate_config(data) -> list[str]:
     errors = []
     if not isinstance(data, dict):
         return ["配置根节点必须是对象"]
+
+    startup = data.get("startup", {})
+    if not isinstance(startup, dict):
+        errors.append("startup 必须是对象")
+    elif not isinstance(startup.get("start_minimized", True), bool):
+        errors.append("启动时仅显示托盘必须是布尔值")
 
     hk = data.get("hotkey", DEFAULT_CONFIG["hotkey"])
     if not isinstance(hk, str) or not hk.strip():

@@ -131,12 +131,14 @@ def make_response(req_id: int, *, data: dict | None = None,
 
 # 常量集合（供两端引用）
 OPS = (
+    "GetStartupSettings", "SetStartupSettings",
     "Ping", "GetStatus", "GetSettings", "SaveSettings", "RegisterHotkey",
     "RecognizeImage", "TranslateText", "ListTranslationModels", "ResetHotkeys", "SetHotkeyRecording",
     "TestTranslationConnection", "CancelRequest", "Shutdown",
 )
 
 ERROR_CODES = (
+    "startup_failed",
     "bad_request", "unsupported_version", "unknown_op", "busy", "timeout",
     "cancelled", "hotkey_conflict", "config_invalid", "image_too_large",
     "ocr_failed", "translate_failed", "provider_not_configured",

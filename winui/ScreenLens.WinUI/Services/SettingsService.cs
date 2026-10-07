@@ -30,6 +30,9 @@ namespace ScreenLens.WinUI.Services
 
         private static int? _lastResultX;
         private static int? _lastResultY;
+        private static bool _confirmedLaunchAtStartup;
+        private static bool _confirmedStartMinimized = true;
+        private static int _startupStateVersion;
 
         private static readonly SemaphoreSlim _saveMutex = new(1, 1);
         private static readonly SemaphoreSlim _backendSaveMutex = new(1, 1);
@@ -125,7 +128,6 @@ namespace ScreenLens.WinUI.Services
                             GetBool(prefs, "closeCaptureAfterImageAction", true);
                         vm.ResultPosition = GetInt(prefs, "resultPosition", 0);
                         vm.OriginalFontSize = GetInt(prefs, "fontSize", 1);
-                        vm.CopyButtonLook = GetInt(prefs, "copyButtonLook", 0);
                         _lastResultX = GetNullableInt(prefs, "lastResultX");
                         _lastResultY = GetNullableInt(prefs, "lastResultY");
                     }
@@ -139,6 +141,7 @@ namespace ScreenLens.WinUI.Services
 
         public static async Task<string?> LoadBackendAsync(DemoSettings vm)
         {
+            var startupVersion = _startupStateVersion;
             try
             {
                 var resp = await BackendClient.Instance.CallAsync(
@@ -147,17 +150,25 @@ namespace ScreenLens.WinUI.Services
                 if (cfg is not null)
                 {
                     ApplyBackendToVm(vm, cfg);
+                    if (startupVersion == _startupStateVersion && !vm.StartupSaveInProgress)
+                        ApplyStartupState(vm, resp["startup"] as JsonObject);
                     return null;
                 }
+                if (startupVersion == _startupStateVersion && !vm.StartupSaveInProgress)
+                    vm.StartupSettingsAvailable = false;
                 return "后端返回的配置为空";
             }
             catch (BackendException e)
             {
                 // 文案由 BackendClient 给出（含"后台代理未运行"等明确成因）
+                if (startupVersion == _startupStateVersion && !vm.StartupSaveInProgress)
+                    vm.StartupSettingsAvailable = false;
                 return e.Message;
             }
             catch (Exception e)
             {
+                if (startupVersion == _startupStateVersion && !vm.StartupSaveInProgress)
+                    vm.StartupSettingsAvailable = false;
                 return $"后台代理未运行或无法连接（{e.Message}）";
             }
         }
@@ -183,6 +194,73 @@ namespace ScreenLens.WinUI.Services
                 vm.OpenAiModel = oa["model"]?.GetValue<string>() ?? "";
                 vm.OpenAiApiKey = oa["api_key"]?.GetValue<string>() ?? "";
             }
+        }
+
+        private static void ApplyStartupState(DemoSettings vm, JsonObject? state)
+        {
+            vm.StartupSettingsAvailable = state is not null && !state.ContainsKey("error")
+                && state.ContainsKey("launch_at_startup");
+            if (!vm.StartupSettingsAvailable) return;
+            _confirmedLaunchAtStartup = GetBool(state!, "launch_at_startup", false);
+            _confirmedStartMinimized = GetBool(state!, "start_minimized", true);
+            var suppressed = vm.SuppressPersist;
+            vm.SuppressPersist = true;
+            try
+            {
+                vm.LaunchAtStartup = _confirmedLaunchAtStartup;
+                vm.StartMinimized = _confirmedStartMinimized;
+            }
+            finally { vm.SuppressPersist = suppressed; }
+        }
+
+        public static async Task RefreshStartupAsync(DemoSettings vm)
+        {
+            if (vm.StartupSaveInProgress) return;
+            var version = ++_startupStateVersion;
+            try
+            {
+                var state = await BackendClient.Instance.CallAsync("GetStartupSettings", null);
+                if (version == _startupStateVersion && !vm.StartupSaveInProgress)
+                    ApplyStartupState(vm, state);
+            }
+            catch
+            {
+                if (version == _startupStateVersion && !vm.StartupSaveInProgress)
+                    vm.StartupSettingsAvailable = false;
+            }
+        }
+
+        public static async Task SaveStartupAsync(DemoSettings vm)
+        {
+            if (vm.StartupSaveInProgress) return;
+            ++_startupStateVersion;
+            vm.StartupSaveInProgress = true;
+            try
+            {
+                var state = await BackendClient.Instance.CallAsync("SetStartupSettings", new JsonObject
+                {
+                    ["launch_at_startup"] = vm.LaunchAtStartup,
+                    ["start_minimized"] = vm.StartMinimized,
+                });
+                ApplyStartupState(vm, state);
+            }
+            catch (Exception error)
+            {
+                var suppressed = vm.SuppressPersist;
+                vm.SuppressPersist = true;
+                try
+                {
+                    vm.LaunchAtStartup = _confirmedLaunchAtStartup;
+                    vm.StartMinimized = _confirmedStartMinimized;
+                }
+                finally { vm.SuppressPersist = suppressed; }
+                vm.ShowToast(error is BackendException ? error.Message : "启动设置保存失败，请确认后台正在运行。");
+                // A disconnect may follow a successful commit. Re-read the
+                // actual state rather than assuming that nothing was saved.
+                try { ApplyStartupState(vm, await BackendClient.Instance.CallAsync("GetStartupSettings", null)); }
+                catch { vm.StartupSettingsAvailable = false; }
+            }
+            finally { vm.StartupSaveInProgress = false; }
         }
 
         // ------------------------------------------------------------ 保存
@@ -322,7 +400,6 @@ namespace ScreenLens.WinUI.Services
                         ["closeCaptureAfterImageAction"] = vm.CloseCaptureAfterImageAction,
                         ["resultPosition"] = vm.ResultPosition,
                         ["fontSize"] = vm.OriginalFontSize,
-                        ["copyButtonLook"] = vm.CopyButtonLook,
                         ["lastResultX"] = _lastResultX,
                         ["lastResultY"] = _lastResultY,
                     };

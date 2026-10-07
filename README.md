@@ -145,6 +145,9 @@ python scripts/build_exe.py
 - **翻译服务**：Google 免费接口 / OpenAI 兼容接口 / 关闭翻译
 - **OpenAI 兼容配置**：Base URL、API Key（默认隐藏，可切换显示）、模型
 - **默认目标语言**：中文 / 英文 / 日文
+- **开机自动启动**：默认关闭；启用后注册当前用户的 Windows 登录启动项。开发版使用当前 Python 环境的 `pythonw.exe` 与 `run_agent.pyw`，移动项目或 Python 环境后需重新启用以更新路径。登录启动不会预热 OCR。
+- **启动时仅显示托盘**：默认开启；关闭后正常启动 Agent 时打开设置窗口，与开机自动启动独立。前端主动拉起后台使用 `--background`，不会额外打开设置窗口。
+- **OCR 与结果**：可选择跟随截图、截图所在屏幕居中或记住上次拖动的位置；位置会限制在可用屏幕内。结果文字大小同时作用于原文和译文，默认中号，当前窗口立即更新。
 - **保存并生效**（无需重启）/ **取消** / **恢复默认值**
 
 ### 配置文件
@@ -154,6 +157,7 @@ python scripts/build_exe.py
 
 ```json
 {
+  "startup": {"start_minimized": true},
   "hotkey": "ctrl+`",
   "translation": {
     "provider": "google_free",

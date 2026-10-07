@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 import ctypes
+import argparse
 
 from screenlens.config import Config, validate_config, DEFAULT_CONFIG
 from screenlens.hotkey import ShortcutRegistry
@@ -30,6 +31,7 @@ from screenlens.ipc.protocol import (
 )
 from screenlens.agent.frontend import FrontendManager
 from screenlens.agent.workers import WorkerError, WorkerManager
+from screenlens.agent.startup import StartupRegistration
 
 logger = logging.getLogger("screenlens.agent")
 _AGENT_MUTEX_NAME = r"Local\ScreenLens.Agent"
@@ -75,8 +77,10 @@ def _agent_already_running() -> bool:
 
 
 class HeadlessAgent:
-    def __init__(self):
+    def __init__(self, *, startup_background=False):
         self.config = Config()
+        self.startup = StartupRegistration()
+        self._startup_background = startup_background
         self.hotkeys = ShortcutRegistry({
             action: lambda action=action: self._trigger_shortcut(action)
             for action in ("capture", *DEFAULT_CONFIG["hotkeys"])
@@ -121,12 +125,21 @@ class HeadlessAgent:
         for notice in startup_notices:
             self._notify(notice)
 
-        self._server = PipeServer(PIPE_NAME, self._handle_connection)
+        self._server = PipeServer(PIPE_NAME, self._handle_connection,
+                                  on_ready=self._on_server_ready)
         try:
             self._server.serve_forever()
         finally:
             self.shutdown()
         return 0
+
+    def _on_server_ready(self) -> None:
+        # Explicit settings/capture requests bootstrap only the background.
+        # Normal/login startup may show settings after IPC is ready.
+        if (not self._startup_background and not self._stop.is_set() and
+                not self._start_minimized()):
+            if self.frontends.launch("settings") is None:
+                self._notify("后台已启动，但无法打开设置窗口。请检查前端构建产物。")
 
     def shutdown(self) -> None:
         if self._stop.is_set():
@@ -309,7 +322,14 @@ class HeadlessAgent:
             self._respond(pipe, req_id, data={
                 "config": self.config.as_dict(),
                 "path": self.config.path,
+                "startup": self._startup_status(),
             })
+
+        elif op == "GetStartupSettings":
+            self._respond(pipe, req_id, data=self._startup_status())
+
+        elif op == "SetStartupSettings":
+            self._op_startup_settings(pipe, req_id, data)
 
         elif op == "SaveSettings":
             self._op_save_settings(pipe, req_id, data)
@@ -398,6 +418,43 @@ class HeadlessAgent:
 
     # -------------------------------------------------------- IPC 处理器
 
+    def _start_minimized(self):
+        startup = self.config.as_dict().get("startup")
+        return not isinstance(startup, dict) or startup.get("start_minimized", True) is not False
+
+    def _startup_status(self):
+        state = {"start_minimized": self._start_minimized()}
+        try:
+            state["launch_at_startup"] = self.startup.enabled()
+        except OSError:
+            state["error"] = "无法读取 Windows 启动项，请稍后重试。"
+        return state
+
+    def _op_startup_settings(self, pipe, req_id, data):
+        if not all(isinstance(data.get(key), bool)
+                   for key in ("launch_at_startup", "start_minimized")):
+            raise IpcError("bad_request", "启动设置格式不正确")
+        with self._shortcut_lock:
+            previous_entry = None
+            changed = False
+            try:
+                previous_entry = self.startup.snapshot()
+                self.startup.set_enabled(data["launch_at_startup"])
+                changed = True
+                updated = self.config.as_dict()
+                if not isinstance(updated.get("startup"), dict):
+                    updated["startup"] = {}
+                updated["startup"]["start_minimized"] = data["start_minimized"]
+                self.config.apply_dict(updated)
+            except OSError as error:
+                if changed:
+                    try:
+                        self.startup.restore(previous_entry)
+                    except OSError:
+                        raise IpcError("startup_failed", "启动设置保存失败，启动项回退也失败；请重新打开设置核对状态。") from error
+                raise IpcError("startup_failed", "启动设置保存失败，请检查启动程序路径或 Windows 写入权限。") from error
+            self._respond(pipe, req_id, data=self._startup_status())
+
     def _op_save_settings(self, pipe, req_id: int, data: dict) -> None:
         submitted = data.get("config")
         if not isinstance(submitted, dict):
@@ -468,10 +525,14 @@ def setup_logging() -> None:
         handlers=handlers)
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="ScreenLens 后台托盘代理")
+    parser.add_argument("--autostart", action="store_true", help="由 Windows 登录启动项调用")
+    parser.add_argument("--background", action="store_true", help="仅启动后台，供前端显式唤起")
+    args = parser.parse_args(argv)
     setup_logging()
     logger.info("headless 代理启动 pid=%s", os.getpid())
-    agent = HeadlessAgent()
+    agent = HeadlessAgent(startup_background=args.background)
     try:
         return agent.start()
     except KeyboardInterrupt:

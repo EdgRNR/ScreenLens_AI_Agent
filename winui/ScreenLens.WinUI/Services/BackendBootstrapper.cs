@@ -63,13 +63,19 @@ namespace ScreenLens.WinUI.Services
             if (!string.IsNullOrWhiteSpace(explicitExe)
                 && File.Exists(explicitExe))
             {
-                return HiddenStart(explicitExe);
+                var info = HiddenStart(explicitExe);
+                info.ArgumentList.Add("--background");
+                return info;
             }
 
             var appDir = AppContext.BaseDirectory;
             var packagedAgent = Path.Combine(appDir, "ScreenLensAgent.exe");
             if (File.Exists(packagedAgent))
-                return HiddenStart(packagedAgent);
+            {
+                var info = HiddenStart(packagedAgent);
+                info.ArgumentList.Add("--background");
+                return info;
+            }
 
             // 开发态默认由开发者独立启动 Agent；仅显式开启时才自动拉起仓库 Python。
             if (!string.Equals(Environment.GetEnvironmentVariable(
@@ -92,6 +98,7 @@ namespace ScreenLens.WinUI.Services
                 var info = HiddenStart(interpreter);
                 info.WorkingDirectory = repo;
                 info.ArgumentList.Add(entry);
+                info.ArgumentList.Add("--background");
                 return info;
             }
 
@@ -103,6 +110,7 @@ namespace ScreenLens.WinUI.Services
                 var info = HiddenStart(pathPython);
                 info.WorkingDirectory = repo;
                 info.ArgumentList.Add(entry);
+                info.ArgumentList.Add("--background");
                 return info;
             }
             return null;

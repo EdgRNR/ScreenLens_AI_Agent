@@ -146,10 +146,41 @@ namespace ScreenLens.WinUI.ViewModels
         public event Action<int>? ThemeModeChanged;
 
         private bool _launchAtStartup;
-        public bool LaunchAtStartup { get => _launchAtStartup; set => Set(ref _launchAtStartup, value); }
+        public bool LaunchAtStartup
+        {
+            get => _launchAtStartup;
+            set
+            {
+                if (Set(ref _launchAtStartup, value) && !SuppressPersist && StartupSettingsAvailable)
+                    _ = SettingsService.SaveStartupAsync(this);
+            }
+        }
 
-        private bool _startMinimized;
-        public bool StartMinimized { get => _startMinimized; set => Set(ref _startMinimized, value); }
+        private bool _startMinimized = true;
+        public bool StartMinimized
+        {
+            get => _startMinimized;
+            set
+            {
+                if (Set(ref _startMinimized, value) && !SuppressPersist && StartupSettingsAvailable)
+                    _ = SettingsService.SaveStartupAsync(this);
+            }
+        }
+
+        private bool _startupSettingsAvailable;
+        public bool StartupSettingsAvailable
+        {
+            get => _startupSettingsAvailable;
+            internal set { if (Set(ref _startupSettingsAvailable, value)) Raise(nameof(CanEditStartup)); }
+        }
+
+        private bool _startupSaveInProgress;
+        public bool StartupSaveInProgress
+        {
+            get => _startupSaveInProgress;
+            internal set { if (Set(ref _startupSaveInProgress, value)) Raise(nameof(CanEditStartup)); }
+        }
+        public bool CanEditStartup => StartupSettingsAvailable && !StartupSaveInProgress;
 
         // ---------- 截图与选区 ----------
         /// <summary>左键选区：0 = 矩形选区，1 = 自由圈选（默认）</summary>
@@ -295,6 +326,7 @@ namespace ScreenLens.WinUI.ViewModels
             get => _resultPosition;
             set
             {
+                if (value is not (0 or 1 or 2)) return;
                 if (Set(ref _resultPosition, value) && !SuppressPersist)
                 {
                     SettingsService.SaveFrontendDebounced(this);
@@ -309,21 +341,8 @@ namespace ScreenLens.WinUI.ViewModels
             get => _originalFontSize;
             set
             {
+                if (value is not (0 or 1 or 2)) return;
                 if (Set(ref _originalFontSize, value) && !SuppressPersist)
-                {
-                    SettingsService.SaveFrontendDebounced(this);
-                }
-            }
-        }
-
-        /// <summary>0 = 图标 + 文字，1 = 仅图标</summary>
-        private int _copyButtonLook;
-        public int CopyButtonLook
-        {
-            get => _copyButtonLook;
-            set
-            {
-                if (Set(ref _copyButtonLook, value) && !SuppressPersist)
                 {
                     SettingsService.SaveFrontendDebounced(this);
                 }

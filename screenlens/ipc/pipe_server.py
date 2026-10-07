@@ -175,9 +175,10 @@ def _close(raw) -> None:
 class PipeServer:
     """单实例多连接的命名管道服务端。"""
 
-    def __init__(self, name: str, handler):
+    def __init__(self, name: str, handler, *, on_ready=None):
         self._name = name
         self._handler = handler  # handler(pipe: _PipeHandle)
+        self._on_ready = on_ready
         self._stopping = False
         self._lock = threading.Lock()
         self._threads: list[threading.Thread] = []
@@ -203,6 +204,19 @@ class PipeServer:
                 if raw in (INVALID_HANDLE, None, 0):
                     raise ctypes.WinError(ctypes.get_last_error())
 
+                if self._on_ready is not None:
+                    callback, self._on_ready = self._on_ready, None
+                    try:
+                        callback()
+                    except Exception:
+                        logger.exception("后台就绪后的启动操作失败")
+
+                # stop() may run before this instance exists, so its wake-up
+                # connection can miss the pipe. Recheck before blocking.
+                if self._stopping:
+                    _close(raw)
+                    raw = INVALID_HANDLE
+                    break
                 connected = kern.ConnectNamedPipe(ctypes.c_void_p(raw), None)
                 last_err = ctypes.get_last_error()
                 # ERROR_PIPE_CONNECTED(535)：客户端在 Connect 前已接入

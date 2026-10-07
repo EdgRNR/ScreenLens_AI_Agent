@@ -50,6 +50,11 @@ namespace ScreenLens.WinUI.Views.Result
         private bool _comparisonRequested = true;
         private InputNonClientPointerSource? _captionPointerSource;
         private RectInt32? _captionRect;
+        private readonly DispatcherTimer _positionSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
+        private PointInt32 _lastNormalPosition;
+        private bool _positionReady;
+        private bool _positionDirty;
+        private Task _positionSaveTask = Task.CompletedTask;
 
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hwnd);
@@ -84,12 +89,14 @@ namespace ScreenLens.WinUI.Views.Result
             _vm.ThemeModeChanged += ApplyTheme;
             _vm.PropertyChanged += OnSettingsChanged;
             _translationRefresh.Tick += (_, _) => FlushTranslation();
+            _positionSaveTimer.Tick += async (_, _) => await FlushPositionAsync();
             AppWindow.Closing += OnAppWindowClosing;
             Closed += (_, _) =>
             {
                 _closed = true;
                 _translationCancellation?.Cancel();
                 _translationRefresh.Stop();
+                _positionSaveTimer.Stop();
                 _vm.PropertyChanged -= OnSettingsChanged;
                 AppWindow.Closing -= OnAppWindowClosing;
                 _vm.ThemeModeChanged -= ApplyTheme;
@@ -101,12 +108,7 @@ namespace ScreenLens.WinUI.Views.Result
             ConfigureWindowChrome();
 
             OcrText.Text = _ocrText;
-            OcrText.FontSize = _vm.OriginalFontSize switch
-            {
-                0 => 13,
-                2 => 17,
-                _ => 15,
-            };
+            ApplyResultFontSize();
             MetaText.Text = elapsed > 0 ? $"{elapsed} ms · {LinesOf(ocrResp)} 行" : "";
 
             // Provider == 2 表示关闭翻译
@@ -115,15 +117,6 @@ namespace ScreenLens.WinUI.Views.Result
                 TranslateBtn.IsEnabled = false;
                 TranslateBtn.Content = "翻译已关闭";
                 TargetLanguageBox.IsEnabled = false;
-            }
-
-            if (_vm.CopyButtonLook == 1)
-            {
-                CopyBtn.Content = new FontIcon
-                {
-                    Glyph = "\uE8C8",
-                    FontSize = 14,
-                };
             }
 
             PositionWindow();
@@ -189,7 +182,28 @@ namespace ScreenLens.WinUI.Views.Result
         }
 
         private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
-            => UpdateMaximizeButton();
+        {
+            UpdateMaximizeButton();
+            if (!_positionReady || _closed || !args.DidPositionChange
+                || AppWindow.Presenter is not OverlappedPresenter presenter
+                || presenter.State != OverlappedPresenterState.Restored) return;
+            _lastNormalPosition = AppWindow.Position;
+            _positionDirty = true;
+            _positionSaveTimer.Stop();
+            _positionSaveTimer.Start();
+        }
+
+        private Task FlushPositionAsync()
+        {
+            _positionSaveTimer.Stop();
+            if (_positionDirty)
+            {
+                _positionDirty = false;
+                _positionSaveTask = SettingsService.SaveLastResultPositionAsync(
+                    _lastNormalPosition.X, _lastNormalPosition.Y);
+            }
+            return _positionSaveTask;
+        }
 
         private void UpdateMaximizeButton()
         {
@@ -226,7 +240,15 @@ namespace ScreenLens.WinUI.Views.Result
                 && SettingsService.TryGetLastResultPosition(out _, out _);
             var reference = new PointInt32(_screenX + _regionW / 2, _screenY + _regionH / 2);
             if (remembered && SettingsService.TryGetLastResultPosition(out var lastX, out var lastY))
+            {
                 reference = new PointInt32(lastX, lastY);
+                // A disconnected monitor must not strand the result window.
+                if (DisplayArea.GetFromPoint(reference, DisplayAreaFallback.None) is null)
+                {
+                    remembered = false;
+                    reference = new PointInt32(_screenX + _regionW / 2, _screenY + _regionH / 2);
+                }
+            }
             var area = DisplayArea.GetFromPoint(reference, DisplayAreaFallback.Nearest);
             var work = area?.WorkArea ?? new RectInt32(_screenX, _screenY, 1920, 1080);
 
@@ -264,8 +286,10 @@ namespace ScreenLens.WinUI.Views.Result
             var bounds = ResultWindowLayout.FitToWorkArea(new ResultBounds(x, y, w, h),
                 new ResultBounds(work.X, work.Y, work.Width, work.Height));
             AppWindow.MoveAndResize(new RectInt32(bounds.X, bounds.Y, bounds.Width, bounds.Height));
-            if (_vm.ResultPosition == 2)
-                _ = SettingsService.SaveLastResultPositionAsync(bounds.X, bounds.Y);
+            _lastNormalPosition = new PointInt32(bounds.X, bounds.Y);
+            _positionReady = true;
+            _positionDirty = true;
+            _positionSaveTimer.Start();
             if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter p)
             {
                 p.IsResizable = true;
@@ -321,7 +345,7 @@ namespace ScreenLens.WinUI.Views.Result
             OriginalPanel.Margin = new Thickness(0, 0, compare ? 6 : 0, 0);
             TranslatePanel.Margin = new Thickness(compare ? 6 : 0, 0, 0, 0);
             var copyLabel = _showTranslation ? "复制译文" : "复制原文";
-            if (CopyBtn.Content is not FontIcon) CopyBtn.Content = copyLabel;
+            CopyBtn.Content = copyLabel;
             ToolTipService.SetToolTip(CopyBtn, copyLabel);
             AutomationProperties.SetName(CopyBtn, copyLabel);
         }
@@ -345,12 +369,26 @@ namespace ScreenLens.WinUI.Views.Result
 
         private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
         {
+            if (!DispatcherQueue.HasThreadAccess)
+            {
+                DispatcherQueue.TryEnqueue(() => OnSettingsChanged(sender, e));
+                return;
+            }
+            if (_closed) return;
+            if (e.PropertyName == nameof(DemoSettings.OriginalFontSize))
+                ApplyResultFontSize();
             if (e.PropertyName == nameof(DemoSettings.Provider) && !_translating && !_closed)
             {
                 TranslateBtn.IsEnabled = _vm.Provider != 2;
                 TranslateBtn.Content = _vm.Provider == 2 ? "翻译已关闭" : "翻译";
                 TargetLanguageBox.IsEnabled = _vm.Provider != 2;
             }
+        }
+
+        private void ApplyResultFontSize()
+        {
+            var size = _vm.OriginalFontSize switch { 0 => 13, 2 => 17, _ => 15 };
+            OcrText.FontSize = TranslatedText.FontSize = size;
         }
 
         private void OnAutomaticTranslationLoaded(object sender, RoutedEventArgs e)
@@ -366,7 +404,7 @@ namespace ScreenLens.WinUI.Views.Result
 
         private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
         {
-            if (_allowClose || !_translating) return;
+            if (_allowClose) return;
             args.Cancel = true;
             _ = CloseResultAsync();
         }
@@ -382,6 +420,7 @@ namespace ScreenLens.WinUI.Views.Result
             if (_closed || _closeRequested) return;
             _closeRequested = true;
             await CancelTranslationAsync();
+            await FlushPositionAsync();
             if (_closed) return;
             _allowClose = true;
             Close();
@@ -529,7 +568,7 @@ namespace ScreenLens.WinUI.Views.Result
                     return;
                 }
                 await sel.ShowForCaptureAsync();
-                Close(); // 本窗口关闭，进程由新选区窗口维持
+                await CloseResultAsync(); // 本窗口关闭，进程由新选区窗口维持
             }
             catch (Exception ex)
             {

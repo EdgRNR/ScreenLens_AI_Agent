@@ -285,6 +285,12 @@ class WorkerManager:
         """
         if getattr(sys, "frozen", False):
             return os.environ.get("SCREENLENS_WORKER_EXE", sys.executable)
+        # Login startup uses pythonw (no console). The framed Python worker
+        # needs real stdin/stdout; use python.exe with CREATE_NO_WINDOW.
+        if os.path.basename(sys.executable).lower() == "pythonw.exe":
+            console_python = os.path.join(os.path.dirname(sys.executable), "python.exe")
+            if os.path.isfile(console_python):
+                return console_python
         return sys.executable
 
     def _spawn(self) -> _WorkerProc:
