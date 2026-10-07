@@ -254,10 +254,13 @@ class WorkerManager:
             os.path.abspath(__file__))))
         command = native_ocr_command(repo_root) if op == "ocr" else None
         if (op == "ocr" and command is None and
-                os.environ.get("SCREENLENS_OCR_BACKEND", "auto").lower() == "csharp"):
-            raise WorkerError("ocr_failed", "C# OCR worker 不完整，请运行 scripts/build_ocr_worker.py")
+                (getattr(sys, "frozen", False) or
+                 os.environ.get("SCREENLENS_OCR_BACKEND", "auto").lower() == "csharp")):
+            raise WorkerError("ocr_failed", "C# OCR worker 或模型不完整，请重新解压完整程序包。" if
+                              getattr(sys, "frozen", False) else
+                              "C# OCR worker 不完整，请运行 scripts/build_ocr_worker.py")
         backend = "csharp-ocr" if command else "python"
-        command = command or [self._python_executable(), "-m", "screenlens.worker"]
+        command = command or self._translation_worker_command()
         with self._state_lock:
             w = self._worker
             if (w is not None and not w.dead and w.proc.poll() is None and
@@ -273,6 +276,15 @@ class WorkerManager:
             return w
 
     @staticmethod
+    def _translation_worker_command() -> list[str]:
+        if getattr(sys, "frozen", False):
+            worker = os.path.join(os.path.dirname(sys.executable), "ScreenLensWorker.exe")
+            if not os.path.isfile(worker):
+                raise WorkerError("worker_crashed", "翻译 worker 缺失，请重新解压完整程序包。")
+            return [worker]
+        return [WorkerManager._python_executable(), "-m", "screenlens.worker"]
+
+    @staticmethod
     def _python_executable() -> str:
         """worker 必须用【带依赖的解释器】启动。
 
@@ -280,11 +292,8 @@ class WorkerManager:
         看不到 venv 的 site-packages，会直接 ModuleNotFoundError(PIL)。
         venv 的 sys.executable 在 Windows 上是启动器 shim，会额外产生一个
         ~1 MiB 的转发进程，属可接受的短暂开销。
-        若代理被 PyInstaller 打包（sys.frozen），可用环境变量
-        SCREENLENS_WORKER_EXE 显式指定带依赖的解释器。
+        打包版本由 _translation_worker_command 使用同目录的独立 worker。
         """
-        if getattr(sys, "frozen", False):
-            return os.environ.get("SCREENLENS_WORKER_EXE", sys.executable)
         # Login startup uses pythonw (no console). The framed Python worker
         # needs real stdin/stdout; use python.exe with CREATE_NO_WINDOW.
         if os.path.basename(sys.executable).lower() == "pythonw.exe":
@@ -294,11 +303,11 @@ class WorkerManager:
         return sys.executable
 
     def _spawn(self) -> _WorkerProc:
-        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(
-            os.path.abspath(__file__))))
+        repo_root = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else
+                     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         try:
             proc = subprocess.Popen(
-                self._spawn_command or [self._python_executable(), "-m", "screenlens.worker"],
+                self._spawn_command or self._translation_worker_command(),
                 cwd=repo_root,               # 仓库根，保证 -m 找到包
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, close_fds=True,

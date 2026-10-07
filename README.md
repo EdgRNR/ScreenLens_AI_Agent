@@ -40,7 +40,7 @@ Windows 桌面轻量取词工具：**自由圈选 → 本地 OCR → 复制 / �
 
 仓库中的 `run_legacy.py`、`run_legacy.pyw` 和 `dist/ScreenLens/ScreenLens.exe` 属于旧版 Python/Tk 原型，不是当前 WinUI 应用入口。
 
-WinUI 与 Python Agent 的单独发布打包流程尚未提供。发布包应包含 WinUI 前端和配套 Agent/Worker；不要用旧脚本生成的 exe 作为当前 WinUI 版本。
+当前 WinUI/Agent 的免安装测试包由 `scripts/build_portable.py` 构建，包含自带运行库的 WinUI、Agent、翻译 worker 和离线 C# OCR worker。解压后运行 `ScreenLens.WinUI.exe`，无需安装 Python 或 .NET；构建与验证步骤见 [便携包说明](docs/PORTABLE.md)。旧 `scripts/build_exe.py` 仍只用于 Tk 原型。
 
 旧原型源码启动命令（仅用于维护旧版）：
 
@@ -238,7 +238,7 @@ python scripts/acceptance_phase2.py
 2. **管理员窗口**：焦点在提权（管理员）应用中时，普通权限的热键钩子收不到按键——此时需以管理员运行 ScreenLens（Windows 通用限制）。
 3. **google_free** 为非官方接口，可能随时失效；失败时浮窗会提示「翻译失败，请检查网络或服务配置」。追求稳定请配置 `openai` Provider。
 4. **日文识别**：使用 PP-OCR 中日通用模型，常规假名/汉字识别良好，极端艺术字体可能不如专用日文模型。
-5. **打包体积**：约 260MB（Python 运行时 + onnxruntime + OpenCV + 离线模型）；采用 onedir 而非单文件，保证常驻启动速度。
+5. **打包体积**：免安装测试包携带 WinUI/.NET/Python 运行库、原生 OCR 依赖及离线模型，实际大小以生成的 ZIP 为准；采用目录部署以便按需启动各进程。
 6. **多显示器 / 混合 DPI**：遮罩按虚拟屏幕包围盒铺满；浮动工具条改为按**主显示器**（空闲态）或**选区所在显示器**（选区内）定位与避让，已有自动化布局测试覆盖。但**混合 DPI 缩放（如 100% + 200% 拼接）场景仍未实测**（复现步骤：外接不同缩放比例的第二显示器，在扩展屏上按热键圈选，观察遮罩与工具条位置）。
 7. **截图兼容性**：当前 WinUI 截图由 GDI BitBlt 实现；启用受保护/无重定向表面的应用可能无法被截取，详见前文抓屏边界说明。
 8. **桌面验收**：混合 DPI、多显示器切换、系统缩放和后台托盘唤起需在目标 Windows 设备实测。

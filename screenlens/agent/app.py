@@ -529,7 +529,11 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="ScreenLens 后台托盘代理")
     parser.add_argument("--autostart", action="store_true", help="由 Windows 登录启动项调用")
     parser.add_argument("--background", action="store_true", help="仅启动后台，供前端显式唤起")
+    parser.add_argument("--check-install", metavar="JSON_PATH", help="只检查发布文件，将诊断写入指定文件")
     args = parser.parse_args(argv)
+    if args.check_install:
+        from screenlens.agent.install_check import check_install
+        return check_install(args.check_install)
     setup_logging()
     logger.info("headless 代理启动 pid=%s", os.getpid())
     agent = HeadlessAgent(startup_background=args.background)

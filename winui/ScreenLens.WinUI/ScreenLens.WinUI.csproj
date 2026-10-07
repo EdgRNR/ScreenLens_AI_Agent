@@ -42,8 +42,27 @@
     这里让 Assets 同时部署到 exe 同级目录。
   -->
   <ItemGroup>
-    <Content Update="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="Assets\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Unpackaged WinUI copies XBFs to build output, but the SDK publish
+       pipeline does not include them automatically. Keep their relative
+       paths so LoadComponent works outside the development checkout. -->
+  <Target Name="PublishCompiledXaml" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <_CompiledXamlToPublish Include="$(TargetDir)**\*.xbf" />
+      <ResolvedFileToPublish Include="@(_CompiledXamlToPublish)">
+        <RelativePath>%(_CompiledXamlToPublish.RecursiveDir)%(_CompiledXamlToPublish.Filename)%(_CompiledXamlToPublish.Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+      <!-- The merged PRI includes SDK themes. Unpackaged applications load
+           it as resources.pri rather than the library-style assembly name. -->
+      <ResolvedFileToPublish Include="$(TargetDir)$(TargetName).pri">
+        <RelativePath>resources.pri</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
   <!-- Keep ordinary Run Agent / VS builds on the current merged index too,
        rather than relying on an older resources.pri left in the output. -->

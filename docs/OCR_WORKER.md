@@ -45,10 +45,14 @@ OCR 与流式翻译进程切换、超限及截断协议帧。缺少 native 构�
 
 ## 发布与边界
 
-worker 是 framework-dependent 的 x64 net8 控制台程序，启动时隐藏控制台。
-当前发布包尚未统一制作；将 `dist/ocr/` 完整放在 Agent 程序旁的 `ocr/`
-目录，确保目标设备有 x64 .NET 8 运行时。旧 `scripts/build_exe.py` 打包
-的是 Tk 原型，不是当前 WinUI/Agent 发行版。
+`scripts/build_ocr_worker.py` 的独立开发输出是 framework-dependent 的 x64
+net8 控制台程序，需要 x64 .NET 8 运行时，启动时隐藏控制台。
+
+`scripts/build_portable.py` 则统一构建当前 WinUI/Agent 免安装测试包，OCR
+使用 self-contained 发布并携带运行库和模型，放在 Agent 旁的 `ocr/`
+目录，无需另装 .NET。便携包不包含 Python OCR 回退依赖；缺少 OCR 文件时
+会明确提示重新解压。具体步骤见 [PORTABLE.md](PORTABLE.md)。旧
+`scripts/build_exe.py` 仅打包 Tk 原型。
 
 OCR 输出保持原 IPC 的 `text`、`lines[{text,score,box}]`、`elapsed_ms`，
 检测框映射回原图尺寸。极端细长图片会将短边至少调整到 32 像素，避免

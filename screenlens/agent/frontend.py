@@ -39,7 +39,8 @@ def find_frontend_exe() -> str | None:
     if env:
         candidates.append(env)
     # 打包布局：代理 exe 同目录
-    exe_dir = os.path.dirname(os.path.abspath(sys.argv[0] or "."))
+    exe_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False)
+                                             else sys.argv[0] or "."))
     candidates.append(os.path.join(exe_dir, "ScreenLens.WinUI.exe"))
     # 开发布局：仓库构建产物（Debug 优先，回退 Release）
     root = _repo_root()

@@ -56,6 +56,11 @@ namespace ScreenLens.WinUI
             UnhandledException += OnUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
 
+            // Bundle smoke checks load WinUI/XAML without opening windows,
+            // connecting to the user's Agent or forwarding to a live instance.
+            if (GetLaunchArguments().Any(a => a.StartsWith("--check-install=", StringComparison.Ordinal)))
+                return;
+
             if (!SingleInstanceCoordinator.TryBecomePrimary(
                     DispatcherQueue.GetForCurrentThread(),
                     HandleActivation, out _singleInstance))
@@ -116,6 +121,53 @@ namespace ScreenLens.WinUI
         /// </summary>
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
+            var diagnostic = GetLaunchArguments().FirstOrDefault(a =>
+                a.StartsWith("--check-install=", StringComparison.Ordinal));
+            if (diagnostic is not null)
+            {
+                var report = new System.Text.Json.Nodes.JsonObject();
+                try
+                {
+                    report["stage"] = "vector_resources";
+                    var icons = Resources.MergedDictionaries.Single(dictionary =>
+                        dictionary.Source?.OriginalString.EndsWith("Styles/Icons.xaml", StringComparison.Ordinal) == true);
+                    foreach (var entry in icons)
+                    {
+                        report["icon"] = entry.Key.ToString();
+                        if (entry.Value is not string path)
+                            throw new InvalidOperationException($"设置矢量图标无效：{entry.Key}");
+                        var geometry = Controls.SettingsIcons.FromPath(path);
+                        if (geometry.Bounds.Width <= 0 || geometry.Bounds.Height <= 0)
+                            throw new InvalidOperationException($"设置矢量图标为空：{entry.Key}");
+                        _ = new PathIcon { Data = geometry };
+                        _ = new PathIcon { Data = Controls.SettingsIcons.FromPath(path) };
+                    }
+                    report["vector_icon_count"] = icons.Count;
+                    report["stage"] = "settings_pages";
+                    _ = new Views.Settings.GeneralPage();
+                    _ = new Views.Settings.OcrPage();
+                    _ = new Views.Settings.CapturePage();
+                    _ = new Views.Settings.HotkeysPage();
+                    _ = new Views.Settings.TranslatePage();
+                    _ = new Views.Settings.AppearancePage();
+                    _ = new Views.Settings.AboutPage();
+                    foreach (var file in new[] { "Assets/BrandLogo.png", "Assets/ScreenLens.ico", "ScreenLensAgent.exe" })
+                        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, file)))
+                            throw new FileNotFoundException($"发布文件缺失：{file}");
+                    report["ok"] = true;
+                    report["architecture"] = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString();
+                    report["base_directory"] = AppContext.BaseDirectory;
+                    report["xaml_loaded"] = true;
+                }
+                catch (Exception error)
+                {
+                    report["ok"] = false;
+                    report["error"] = error.ToString();
+                }
+                File.WriteAllText(diagnostic["--check-install=".Length..], report.ToJsonString());
+                Environment.Exit(report["ok"]!.GetValue<bool>() ? 0 : 1);
+                return;
+            }
             HandleActivation(GetLaunchArguments());
         }
 
