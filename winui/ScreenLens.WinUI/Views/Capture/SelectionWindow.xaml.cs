@@ -121,6 +121,11 @@ namespace ScreenLens.WinUI.Views.Capture
             InitializeComponent();
             Closed += (_, _) =>
             {
+                // Keep the frozen desktop intact until the overlay is off
+                // screen. Clearing a visible full-desktop surface can expose
+                // an empty frame during the handoff to the result window.
+                ShotImage.Source = null;
+                _shot.ReleasePixels();
                 _vm.ThemeModeChanged -= ApplyTheme;
                 _freeformGlow?.Dispose();
                 _freeformGlow = null;
@@ -1433,22 +1438,17 @@ namespace ScreenLens.WinUI.Views.Capture
                     "RecognizeImage", null, png, timeoutMs: 90_000);
                 if (RecognitionAbandoned) return;
 
-                // 裁剪已完成：立即释放整幅像素与显示位图（几十 MiB），
-                // 本进程随后只保留结果窗口所需的数据。
-                _shot.ReleasePixels();
-                ShotImage.Source = null;
-
                 // 屏幕物理坐标（供结果窗口定位）
                 var screenX = _shot.OriginX + px;
                 var screenY = _shot.OriginY + py;
 
-                BusyOverlay.Visibility = Visibility.Collapsed;
-
                 var result = new Views.Result.ResultWindow(resp, screenX, screenY,
                     pw, ph, this, _captureAction);
                 result.Activate();
-                // 本窗口在结果窗口显示后关闭（进程由结果窗口维持）
-                Close();
+                // Match the cancellation path: synchronously hide and flush
+                // the full-desktop HWND before Close tears down its XAML.
+                // Closed releases both screenshot buffers after it is hidden.
+                CloseAfterHidingOverlay();
             }
             catch (Exception) when (RecognitionAbandoned)
             {

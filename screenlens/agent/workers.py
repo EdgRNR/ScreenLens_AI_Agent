@@ -3,8 +3,8 @@
 
 策略：
 - 收到 RecognizeImage / TranslateText 时按需 spawn worker；
-- 任务完成后保留 15 秒供后续任务复用（连续识别-翻译快路径），
-  15 秒空闲后通知退出，超时强杀——重内存随进程退出彻底回收；
+- 任务完成后保留 30 秒供后续任务复用（连续识别-翻译快路径），
+  30 秒空闲后通知退出，超时强杀——重内存随进程退出彻底回收；
 - 同一时刻只跑一个任务（内部锁串行），并发请求排队；
 - worker 崩溃（EOF）时对上层返回 worker_crashed，下次任务自动重启；
 - 取消：cancel_current() 终止 worker，进行中的调用收到 cancelled。
@@ -23,7 +23,7 @@ from screenlens.ipc.protocol import encode_frame, read_frame
 
 logger = logging.getLogger(__name__)
 
-_IDLE_TTL = 15.0       # 空闲保留秒数
+_IDLE_TTL = 30.0       # 空闲保留秒数
 _EXIT_GRACE = 3.0      # 优雅退出宽限
 _TASK_TIMEOUT = 90.0    # 单任务看门狗（防 worker 挂死）
 
