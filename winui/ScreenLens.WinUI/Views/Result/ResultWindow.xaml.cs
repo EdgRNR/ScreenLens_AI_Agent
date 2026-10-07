@@ -45,11 +45,21 @@ namespace ScreenLens.WinUI.Views.Result
         private bool _allowClose;
         private bool _closed;
         private bool _recapturing;
+        private bool _hasTranslation;
+        private bool _showTranslation;
+        private bool _comparisonRequested = true;
         private InputNonClientPointerSource? _captionPointerSource;
         private RectInt32? _captionRect;
 
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(PointInt32 point, uint flags);
+
+        [DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(IntPtr monitor, int dpiType,
+            out uint dpiX, out uint dpiY);
 
         public ResultWindow(JsonObject ocrResp, int screenX, int screenY,
             int regionW, int regionH,
@@ -114,10 +124,10 @@ namespace ScreenLens.WinUI.Views.Result
                     Glyph = "\uE8C8",
                     FontSize = 14,
                 };
-                ToolTipService.SetToolTip(CopyBtn, "复制识别文本");
             }
 
             PositionWindow();
+            UpdateReadingLayout();
             Root.Loaded += (_, _) =>
             {
                 Root.Focus(FocusState.Programmatic);
@@ -137,6 +147,8 @@ namespace ScreenLens.WinUI.Views.Result
                 presenter.IsResizable = true;
                 presenter.IsMinimizable = true;
                 presenter.IsMaximizable = true;
+                presenter.PreferredMinimumWidth = 360;
+                presenter.PreferredMinimumHeight = 300;
             }
             _captionPointerSource = InputNonClientPointerSource.GetForWindowId(AppWindow.Id);
             AppWindow.Changed += OnAppWindowChanged;
@@ -210,39 +222,35 @@ namespace ScreenLens.WinUI.Views.Result
 
         private void PositionWindow()
         {
-            // Region coordinates and AppWindow bounds are physical pixels;
-            // minimum content size is expressed in DIPs for high-DPI displays.
-            var dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var remembered = _vm.ResultPosition == 2
+                && SettingsService.TryGetLastResultPosition(out _, out _);
+            var reference = new PointInt32(_screenX + _regionW / 2, _screenY + _regionH / 2);
+            if (remembered && SettingsService.TryGetLastResultPosition(out var lastX, out var lastY))
+                reference = new PointInt32(lastX, lastY);
+            var area = DisplayArea.GetFromPoint(reference, DisplayAreaFallback.Nearest);
+            var work = area?.WorkArea ?? new RectInt32(_screenX, _screenY, 1920, 1080);
+
+            // Get the target monitor's DPI before positioning the HWND. The
+            // newly created window may still belong to a different DPI monitor.
+            var monitor = MonitorFromPoint(reference, 2); // MONITOR_DEFAULTTONEAREST
+            if (GetDpiForMonitor(monitor, 0, out var dpi, out _) != 0 || dpi == 0)
+                dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
             var scale = dpi > 0 ? dpi / 96.0 : 1.0;
-            var minW = (int)Math.Ceiling(420 * scale);
-            var w = Math.Clamp(Math.Max(_regionW, minW), minW, (int)Math.Ceiling(900 * scale));
-            var h = (int)Math.Ceiling(360 * scale);
+            var size = ResultWindowLayout.InitialSize(_ocrText, OcrText.FontSize,
+                work.Width / scale, work.Height / scale);
+            var w = (int)Math.Ceiling(size.Width * scale);
+            var h = (int)Math.Ceiling(size.Height * scale);
 
             int x, y;
-            if (_vm.ResultPosition == 2
-                && SettingsService.TryGetLastResultPosition(out var lastX, out var lastY))
+            if (remembered)
             {
-                x = lastX;
-                y = lastY;
+                x = reference.X;
+                y = reference.Y;
             }
             else if (_vm.ResultPosition == 1)
             {
-                // 屏幕居中：以选区所在显示器为参照
-                var area = Microsoft.UI.Windowing.DisplayArea
-                    .GetFromPoint(new PointInt32(_screenX, _screenY),
-                        Microsoft.UI.Windowing.DisplayAreaFallback.Nearest);
-                if (area is not null)
-                {
-                    x = area.WorkArea.X
-                        + (area.WorkArea.Width - w) / 2;
-                    y = area.WorkArea.Y
-                        + (area.WorkArea.Height - h) / 2;
-                }
-                else
-                {
-                    x = _screenX;
-                    y = _screenY + _regionH + 12;
-                }
+                x = work.X + (work.Width - w) / 2;
+                y = work.Y + (work.Height - h) / 2;
             }
             else
             {
@@ -251,31 +259,13 @@ namespace ScreenLens.WinUI.Views.Result
                 y = _screenY + _regionH + 12;
             }
 
-            // 限制在选区所在显示器工作区内
-            var da = Microsoft.UI.Windowing.DisplayArea
-                .GetFromPoint(new PointInt32(
-                    Math.Max(x, _screenX), Math.Max(y, _screenY)),
-                    Microsoft.UI.Windowing.DisplayAreaFallback.Nearest);
-            if (da is not null)
-            {
-                w = Math.Min(w, da.WorkArea.Width);
-                h = Math.Min(h, da.WorkArea.Height);
-                if (x + w > da.WorkArea.X + da.WorkArea.Width)
-                {
-                    x = da.WorkArea.X + da.WorkArea.Width - w;
-                }
-                if (y + h > da.WorkArea.Y + da.WorkArea.Height)
-                {
-                    y = da.WorkArea.Y + da.WorkArea.Height - h;
-                }
-                x = Math.Max(x, da.WorkArea.X);
-                y = Math.Max(y, da.WorkArea.Y);
-            }
-
-            AppWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(
-                x, y, w, h));
+            // Clamp to this monitor, including when the selection touches its
+            // bottom edge. Do not choose a different monitor from the proposed Y.
+            var bounds = ResultWindowLayout.FitToWorkArea(new ResultBounds(x, y, w, h),
+                new ResultBounds(work.X, work.Y, work.Width, work.Height));
+            AppWindow.MoveAndResize(new RectInt32(bounds.X, bounds.Y, bounds.Width, bounds.Height));
             if (_vm.ResultPosition == 2)
-                _ = SettingsService.SaveLastResultPositionAsync(x, y);
+                _ = SettingsService.SaveLastResultPositionAsync(bounds.X, bounds.Y);
             if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter p)
             {
                 p.IsResizable = true;
@@ -284,6 +274,57 @@ namespace ScreenLens.WinUI.Views.Result
         }
 
         // ---------------------------------------------------------- 操作
+
+        private void OnReadingAreaSizeChanged(object sender, SizeChangedEventArgs e)
+            => UpdateReadingLayout();
+
+        private void OnOriginalTabClick(object sender, RoutedEventArgs e) => SelectReading(false);
+
+        private void OnTranslationTabClick(object sender, RoutedEventArgs e) => SelectReading(true);
+
+        private void OnOriginalTextFocus(object sender, RoutedEventArgs e) => SelectReading(false);
+
+        private void OnTranslatedTextFocus(object sender, RoutedEventArgs e) => SelectReading(true);
+
+        private void SelectReading(bool translation)
+        {
+            _showTranslation = translation && _hasTranslation;
+            UpdateReadingLayout();
+        }
+
+        private void OnCompareClick(object sender, RoutedEventArgs e)
+        {
+            _comparisonRequested = CompareBtn.IsChecked == true;
+            UpdateReadingLayout();
+        }
+
+        private void UpdateReadingLayout()
+        {
+            if (_closed || OriginalPanel is null) return;
+            var wide = ResultWindowLayout.CanCompare(ReadingArea.ActualWidth);
+            var compare = _hasTranslation && wide && _comparisonRequested;
+            var originalVisible = compare || !_showTranslation;
+            var translatedVisible = _hasTranslation && (compare || _showTranslation);
+
+            OriginalTab.IsChecked = !_showTranslation;
+            TranslationTab.IsChecked = _showTranslation;
+            TranslationTab.IsEnabled = _hasTranslation;
+            CompareBtn.IsEnabled = _hasTranslation && wide;
+            CompareBtn.IsChecked = compare;
+            ToolTipService.SetToolTip(CompareBtn, !_hasTranslation ? "翻译后可左右对照"
+                : !wide ? "拉宽窗口或最大化后可左右对照" : "左右对照原文与译文");
+            OriginalPanel.Visibility = originalVisible ? Visibility.Visible : Visibility.Collapsed;
+            TranslatePanel.Visibility = translatedVisible ? Visibility.Visible : Visibility.Collapsed;
+            OriginalColumn.Width = originalVisible ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            TranslatedColumn.Width = translatedVisible ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            OriginalLabel.Visibility = TranslationLabel.Visibility = compare ? Visibility.Visible : Visibility.Collapsed;
+            OriginalPanel.Margin = new Thickness(0, 0, compare ? 6 : 0, 0);
+            TranslatePanel.Margin = new Thickness(compare ? 6 : 0, 0, 0, 0);
+            var copyLabel = _showTranslation ? "复制译文" : "复制原文";
+            if (CopyBtn.Content is not FontIcon) CopyBtn.Content = copyLabel;
+            ToolTipService.SetToolTip(CopyBtn, copyLabel);
+            AutomationProperties.SetName(CopyBtn, copyLabel);
+        }
 
         private void OnMinimizeClick(object sender, RoutedEventArgs e)
         {
@@ -355,9 +396,11 @@ namespace ScreenLens.WinUI.Views.Result
 
         private void OnCopyClick(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrEmpty(_ocrText))
+            var text = _showTranslation ? TranslatedText.Text : _ocrText;
+            var label = _showTranslation ? "译文" : "原文";
+            if (string.IsNullOrEmpty(text))
             {
-                ShowStatus("没有可复制的内容", InfoBarSeverity.Warning);
+                ShowStatus($"没有可复制的{label}", InfoBarSeverity.Warning);
                 return;
             }
             try
@@ -366,9 +409,9 @@ namespace ScreenLens.WinUI.Views.Result
                 {
                     RequestedOperation = DataPackageOperation.Copy,
                 };
-                pkg.SetText(_ocrText);
+                pkg.SetText(text);
                 Clipboard.SetContent(pkg);
-                ShowStatus("已复制到剪贴板", InfoBarSeverity.Success);
+                ShowStatus($"{label}已复制到剪贴板", InfoBarSeverity.Success);
             }
             catch (Exception ex)
             {
@@ -400,10 +443,10 @@ namespace ScreenLens.WinUI.Views.Result
             _translating = true;
             TranslateBtn.Content = "停止翻译";
             TargetLanguageBox.IsEnabled = false;
-            TranslatePanel.Visibility = Visibility.Visible;
-            TranslationRow.Height = new GridLength(1, GridUnitType.Star);
+            _hasTranslation = true;
             TranslatedText.Text = "";
             _translationText.Clear();
+            SelectReading(true);
             _translationRefresh.Start();
             ShowStatus("正在翻译…", InfoBarSeverity.Informational);
             var completed = false;

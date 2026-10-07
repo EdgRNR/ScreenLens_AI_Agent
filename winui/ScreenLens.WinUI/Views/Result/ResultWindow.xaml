@@ -12,8 +12,8 @@
           Background="{ThemeResource AppWindowBgBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition x:Name="TranslationRow" Height="0" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -61,26 +61,55 @@
             </StackPanel>
         </Grid>
 
-        <!-- 原文 -->
-        <TextBox x:Name="OcrText" Grid.Row="1"
-                 IsReadOnly="True" TextWrapping="Wrap"
-                 AcceptsReturn="True"
-                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                 PlaceholderText="（选区内未识别到文字）" />
+        <Grid Grid.Row="1">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <ToggleButton x:Name="OriginalTab" Content="原文" IsChecked="True"
+                              Click="OnOriginalTabClick" MinWidth="64"
+                              AutomationProperties.Name="查看原文" />
+                <ToggleButton x:Name="TranslationTab" Content="译文" IsEnabled="False"
+                              Click="OnTranslationTabClick" MinWidth="64"
+                              AutomationProperties.Name="查看译文" />
+            </StackPanel>
+            <ToggleButton x:Name="CompareBtn" Content="对照" IsEnabled="False"
+                          Click="OnCompareClick" HorizontalAlignment="Right"
+                          AutomationProperties.Name="左右对照"
+                          ToolTipService.ToolTip="拉宽窗口或最大化后可左右对照" />
+        </Grid>
 
-        <!-- 译文 -->
-        <Grid x:Name="TranslatePanel" Grid.Row="2" RowSpacing="6"
-              Visibility="Collapsed">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <TextBlock Text="译文" FontSize="12"
-                       Foreground="{ThemeResource AppTextTertiaryBrush}" />
-            <TextBox x:Name="TranslatedText" Grid.Row="1" IsReadOnly="True"
-                     TextWrapping="Wrap" AcceptsReturn="True"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     FontSize="14" />
+        <!-- Reuse the same text controls when switching views, preserving selection
+             and scroll positions without allocating another copy of either text. -->
+        <Grid x:Name="ReadingArea" Grid.Row="2" SizeChanged="OnReadingAreaSizeChanged">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="OriginalColumn" Width="*" />
+                <ColumnDefinition x:Name="TranslatedColumn" Width="0" />
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="OriginalPanel" RowSpacing="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="OriginalLabel" Text="原文" Visibility="Collapsed"
+                           FontSize="12" Foreground="{ThemeResource AppTextTertiaryBrush}" />
+                <TextBox x:Name="OcrText" Grid.Row="1" GotFocus="OnOriginalTextFocus"
+                         IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.Name="识别原文"
+                         PlaceholderText="（选区内未识别到文字）" />
+            </Grid>
+            <Grid x:Name="TranslatePanel" Grid.Column="1" RowSpacing="6"
+                  Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="TranslationLabel" Text="译文" Visibility="Collapsed"
+                           FontSize="12" Foreground="{ThemeResource AppTextTertiaryBrush}" />
+                <TextBox x:Name="TranslatedText" Grid.Row="1" GotFocus="OnTranslatedTextFocus"
+                         IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.Name="翻译文本"
+                         PlaceholderText="（暂无译文）" FontSize="14" />
+            </Grid>
         </Grid>
 
         <!-- 状态 / 操作 -->
