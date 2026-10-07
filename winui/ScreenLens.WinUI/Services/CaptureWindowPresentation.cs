@@ -11,6 +11,21 @@ namespace ScreenLens.WinUI.Services
         private const int DwmwaCloak = 13;
         private const int DwmwaCloaked = 14;
 
+        internal static void ExcludeFromTaskbar(IntPtr hwnd)
+        {
+            const int exStyleIndex = -20;
+            const int appWindow = 0x00040000, toolWindow = 0x00000080;
+            SetStyle(hwnd, exStyleIndex, (GetWindowLong(hwnd, exStyleIndex) & ~appWindow) | toolWindow);
+        }
+
+        internal static void ShowForPreparation(IntPtr hwnd)
+        {
+            // Render the cloaked HWND without moving focus away from the
+            // desktop. Activation belongs to the completed first-frame reveal.
+            Cloak(hwnd);
+            ShowWindow(hwnd, 4); // SW_SHOWNOACTIVATE
+        }
+
         internal static void ConfigureBorderless(IntPtr hwnd)
         {
             // Presenter settings alone can retain a native frame/client inset.

@@ -215,7 +215,16 @@ namespace ScreenLens.WinUI
                 var restoreSettings = _settingsWindow is not null;
                 _settingsWindow?.AppWindow.Hide();
                 VirtualScreenShot? shot;
-                if (restoreSettings) await Task.Delay(120);
+                if (restoreSettings)
+                {
+                    var taskbar = await TaskbarCaptureSettler.WaitAsync();
+                    WriteLifecycleLog($"隐藏设置后等待任务栏：{taskbar.ElapsedMilliseconds} ms, settled={taskbar.Settled}, probe={taskbar.ProbeAvailable}");
+                }
+                if (_captureStartCancelled)
+                {
+                    RestoreSettingsAfterCapture();
+                    return;
+                }
                 shot = await ScreenCapture.CaptureAsync();
                 if (shot is null)
                 {

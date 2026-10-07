@@ -542,16 +542,21 @@ namespace ScreenLens.WinUI.Views.Result
 
         private async void OnRecaptureClick(object sender, RoutedEventArgs e)
         {
-            if (_closed || _recapturing) return;
+            if (_closed || _recapturing || _closeRequested) return;
             _recapturing = true;
             RecaptureBtn.IsEnabled = false;
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var shownInSwitchers = AppWindow.IsShownInSwitchers;
             Views.Capture.SelectionWindow? sel = null;
             try
             {
                 await CancelTranslationAsync();
                 if (_closed) return;
                 CaptureWindowPresentation.HideBeforeCapture(hwnd);
+                AppWindow.IsShownInSwitchers = false;
+                var taskbar = await TaskbarCaptureSettler.WaitAsync();
+                App.WriteLifecycleLog($"重新截图等待任务栏：{taskbar.ElapsedMilliseconds} ms, settled={taskbar.Settled}, probe={taskbar.ProbeAvailable}");
+                if (_closed || _closeRequested) return;
                 var shot = await ScreenCapture.CaptureAsync();
                 if (shot is null)
                     throw new InvalidOperationException($"屏幕捕获失败：{ScreenCapture.LastError}");
@@ -567,13 +572,22 @@ namespace ScreenLens.WinUI.Views.Result
                     sel.Close();
                     return;
                 }
-                await sel.ShowForCaptureAsync();
-                await CloseResultAsync(); // 本窗口关闭，进程由新选区窗口维持
+                var shown = await sel.ShowForCaptureAsync(CloseResultAsync);
+                if (!shown && !_closed)
+                {
+                    // Cancellation during hidden preparation keeps the result
+                    // usable rather than leaving a live but invisible window.
+                    AppWindow.IsShownInSwitchers = shownInSwitchers;
+                    AppWindow.Show(false);
+                    CaptureWindowPresentation.Reveal(hwnd);
+                    Activate();
+                }
             }
             catch (Exception ex)
             {
                 sel?.Close();
                 if (_closed) return;
+                AppWindow.IsShownInSwitchers = shownInSwitchers;
                 // A failed recapture must restore the result window as well
                 // as native visibility; Show alone does not remove its cloak.
                 try { CaptureWindowPresentation.Reveal(hwnd); }

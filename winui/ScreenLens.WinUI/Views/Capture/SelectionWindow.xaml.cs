@@ -73,7 +73,7 @@ namespace ScreenLens.WinUI.Views.Capture
         private bool _ocrRequestStarted;
         private bool _captureDisplayed;
         private readonly TaskCompletionSource<bool> _presentationClosed = new();
-        private Task? _firstShowTask;
+        private Task<bool>? _firstShowTask;
         private DispatcherQueueTimer? _topmostRetryTimer;
         private int _topmostRetryCount;
         private bool _captureActivationPending;
@@ -221,6 +221,7 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void SetupPresenter()
         {
+            AppWindow.IsShownInSwitchers = false;
             if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter p)
             {
                 p.SetBorderAndTitleBar(false, false);
@@ -230,6 +231,8 @@ namespace ScreenLens.WinUI.Views.Capture
                 p.IsAlwaysOnTop = true;
             }
             CaptureWindowPresentation.ConfigureBorderless(
+                WinRT.Interop.WindowNative.GetWindowHandle(this));
+            CaptureWindowPresentation.ExcludeFromTaskbar(
                 WinRT.Interop.WindowNative.GetWindowHandle(this));
         }
 
@@ -350,10 +353,10 @@ namespace ScreenLens.WinUI.Views.Capture
         /// <summary>加载冻结位图；实际首帧呈现由 ShowForCaptureAsync 单独等待。</summary>
         internal Task PrepareForDisplayAsync() => LoadShotImageAsync();
 
-        internal Task ShowForCaptureAsync()
-            => _firstShowTask ??= ShowFirstCaptureAsync();
+        internal Task<bool> ShowForCaptureAsync(Func<Task>? beforeReveal = null)
+            => _firstShowTask ??= ShowFirstCaptureAsync(beforeReveal);
 
-        private async Task ShowFirstCaptureAsync()
+        private async Task<bool> ShowFirstCaptureAsync(Func<Task>? beforeReveal)
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             CaptureWindowPresentation.Cloak(hwnd);
@@ -367,10 +370,10 @@ namespace ScreenLens.WinUI.Views.Capture
             CompositionTarget.Rendering += OnFrame;
             try
             {
-                Activate();
+                CaptureWindowPresentation.ShowForPreparation(hwnd);
                 var completed = await Task.WhenAny(framesReady.Task, _presentationClosed.Task,
                     Task.Delay(TimeSpan.FromSeconds(3)));
-                if (_presentationClosed.Task.IsCompleted) return;
+                if (_presentationClosed.Task.IsCompleted) return false;
                 if (completed != framesReady.Task)
                     throw new TimeoutException("截图界面在隐藏准备期间未完成绘制。");
                 // Rendering is not a presentation fence. Wait for the compositor
@@ -378,13 +381,18 @@ namespace ScreenLens.WinUI.Views.Capture
                 var commit = Compositor.RequestCommitAsync().AsTask();
                 completed = await Task.WhenAny(commit, _presentationClosed.Task,
                     Task.Delay(TimeSpan.FromSeconds(3)));
-                if (_presentationClosed.Task.IsCompleted) return;
+                if (_presentationClosed.Task.IsCompleted) return false;
                 if (completed != commit)
                     throw new TimeoutException("截图界面的合成提交未完成。");
                 await commit;
+                // Recapture retires the hidden result HWND before exposing
+                // this surface, so its teardown cannot disturb active capture.
+                if (beforeReveal is not null) await beforeReveal();
+                if (_presentationClosed.Task.IsCompleted || _cancelCloseRequested) return false;
                 CaptureWindowPresentation.Reveal(hwnd);
                 _captureDisplayed = true;
                 EnsureCaptureWindowForeground("首帧准备完成");
+                return true;
             }
             finally
             {
