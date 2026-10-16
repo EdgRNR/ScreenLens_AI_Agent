@@ -60,6 +60,10 @@
                 Background="Transparent"
                 Visibility="Collapsed" />
 
+        <!-- Annotation outlines are composited above the frozen screenshot and
+             are added to copy/save output without affecting OCR input. -->
+        <Canvas x:Name="AnnotationCanvas" IsHitTestVisible="False" />
+
         <!-- Eight reused handles; hit testing is resolved in Root, never in the exported image. -->
         <Canvas x:Name="SelectionHandles" IsHitTestVisible="False" Visibility="Collapsed" />
 
@@ -126,6 +130,24 @@
                 <TextBlock Text="px" VerticalAlignment="Center"
                            Margin="0,0,4,0"
                            Foreground="{ThemeResource CaptureToolbarSecondaryBrush}" />
+                <Button x:Name="RectangleAnnotationBtn"
+                        Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
+                        Height="36" Width="36" Padding="8" BorderThickness="0"
+                        Click="OnRectangleAnnotationClick"
+                        ToolTipService.ToolTip="矩形高亮（拖动绘制）"
+                        AutomationProperties.Name="矩形高亮（拖动绘制）">
+                    <Border Width="16" Height="14" BorderBrush="{ThemeResource CaptureToolbarPrimaryBrush}"
+                            BorderThickness="2" CornerRadius="1" />
+                </Button>
+                <Button x:Name="EllipseAnnotationBtn"
+                        Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
+                        Height="36" Width="36" Padding="8" BorderThickness="0"
+                        Click="OnEllipseAnnotationClick"
+                        ToolTipService.ToolTip="椭圆高亮（拖动绘制）"
+                        AutomationProperties.Name="椭圆高亮（拖动绘制）">
+                    <Ellipse Width="16" Height="14" Stroke="{ThemeResource CaptureToolbarPrimaryBrush}"
+                             StrokeThickness="2" />
+                </Button>
                 <Button Background="Transparent" Foreground="{ThemeResource CaptureToolbarPrimaryBrush}"
                         Height="36" VerticalAlignment="Center"
                         BorderThickness="0" Padding="10,8"

@@ -68,7 +68,13 @@ public sealed partial class SelectionWindow
 
     private void UpdateRectangleCursor(Point point, bool overControls = false)
     {
-        var part = overControls ? SelectionEdit.None
+        var annotationHit = !overControls && _annotationMode is null
+            ? HitTestAnnotation(point) >= 0 : false;
+        var freeformHit = !overControls && _annotationMode is null
+            && _freeformSelection && _annotations.Count == 0
+            && _sel.Width >= MinSize && _sel.Height >= MinSize
+            && _sel.Contains(point);
+        var part = annotationHit || freeformHit ? SelectionEdit.Move : overControls ? SelectionEdit.None
             : _rectangleEdit != SelectionEdit.None ? _rectangleEdit : HitTestRectangle(point);
         var shape = part switch
         {
@@ -189,6 +195,7 @@ public sealed partial class SelectionWindow
     private void OnSurfacePointerExited(object sender, PointerRoutedEventArgs e)
     {
         if (_rectangleEdit == SelectionEdit.None)
-            Root.SetCursorShape(InputSystemCursorShape.Arrow);
+            Root.SetCursorShape(_annotationMode is null
+                ? InputSystemCursorShape.Arrow : InputSystemCursorShape.Cross);
     }
 }

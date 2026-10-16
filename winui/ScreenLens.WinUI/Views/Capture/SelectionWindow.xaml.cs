@@ -714,10 +714,27 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            if (_dragging || _rectangleEdit != SelectionEdit.None || _confirmed
+            if (_dragging || _rectangleEdit != SelectionEdit.None || _annotationDragging
+                || _annotationMoving || _freeformMoving || _confirmed
                 || _imageActionBusy || BusyOverlay.Visibility == Visibility.Visible) return;
             if (IsWithinSelectionControls(e.OriginalSource as DependencyObject)) return;
+            if (TryBeginAnnotation(e)) return;
+            if (TryBeginAnnotationMove(e)) return;
+            if (TryBeginFreeformMove(e)) return;
+            if (_annotationMode is not null)
+            {
+                e.Handled = true;
+                return;
+            }
             if (TryBeginRectangleEdit(e)) return;
+            if (_annotations.Count > 0
+                && _sel.Contains(e.GetCurrentPoint(Root).Position))
+            {
+                // Once an annotation exists, the selection is fixed in place;
+                // only the annotation itself can be moved from the interior.
+                e.Handled = true;
+                return;
+            }
             var p = e.GetCurrentPoint(Root);
             var update = p.Properties.PointerUpdateKind;
             if (update != Microsoft.UI.Input.PointerUpdateKind.LeftButtonPressed
@@ -741,6 +758,7 @@ namespace ScreenLens.WinUI.Views.Capture
             HideToolbar();
             Root.CapturePointer(e.Pointer);
             _freeformPoints.Clear();
+            ClearAnnotations();
             if (_freeformSelection)
             {
                 _freeformPoints.Add(_start);
@@ -752,6 +770,33 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
         {
+            if (_annotationDragging)
+            {
+                if (e.Pointer.PointerId == _annotationPointerId)
+                {
+                    MoveAnnotation(e.GetCurrentPoint(Root).Position);
+                    e.Handled = true;
+                }
+                return;
+            }
+            if (_annotationMoving)
+            {
+                if (e.Pointer.PointerId == _annotationPointerId)
+                {
+                    MoveAnnotationShape(e.GetCurrentPoint(Root).Position);
+                    e.Handled = true;
+                }
+                return;
+            }
+            if (_freeformMoving)
+            {
+                if (e.Pointer.PointerId == _freeformMovePointerId)
+                {
+                    MoveFreeformSelection(e.GetCurrentPoint(Root).Position);
+                    e.Handled = true;
+                }
+                return;
+            }
             if (_rectangleEdit != SelectionEdit.None)
             {
                 if (e.Pointer.PointerId == _selectionPointerId)
@@ -796,6 +841,27 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
         {
+            if (_annotationDragging)
+            {
+                if (e.Pointer.PointerId == _annotationPointerId
+                    && !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
+                    FinishAnnotation(e, cancelled: false);
+                return;
+            }
+            if (_annotationMoving)
+            {
+                if (e.Pointer.PointerId == _annotationPointerId
+                    && !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
+                    FinishAnnotationMove(e, cancelled: false);
+                return;
+            }
+            if (_freeformMoving)
+            {
+                if (e.Pointer.PointerId == _freeformMovePointerId
+                    && !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
+                    FinishFreeformMove(e, cancelled: false);
+                return;
+            }
             if (_rectangleEdit != SelectionEdit.None)
             {
                 if (e.Pointer.PointerId == _selectionPointerId
@@ -860,6 +926,24 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnSelectionPointerCanceled(object sender, PointerRoutedEventArgs e)
         {
+            if (_annotationDragging)
+            {
+                if (e.Pointer.PointerId == _annotationPointerId)
+                    FinishAnnotation(e, cancelled: true);
+                return;
+            }
+            if (_annotationMoving)
+            {
+                if (e.Pointer.PointerId == _annotationPointerId)
+                    FinishAnnotationMove(e, cancelled: true);
+                return;
+            }
+            if (_freeformMoving)
+            {
+                if (e.Pointer.PointerId == _freeformMovePointerId)
+                    FinishFreeformMove(e, cancelled: true);
+                return;
+            }
             if (_rectangleEdit != SelectionEdit.None)
             {
                 if (e.Pointer.PointerId == _selectionPointerId)
@@ -887,7 +971,8 @@ namespace ScreenLens.WinUI.Views.Capture
                 }
                 return;
             }
-            if ((_dragging || _rectangleEdit != SelectionEdit.None || _imageActionBusy)
+            if ((_dragging || _rectangleEdit != SelectionEdit.None || _annotationDragging
+                || _annotationMoving || _freeformMoving || _imageActionBusy)
                 && e.Key != Windows.System.VirtualKey.Escape)
             {
                 e.Handled = true;
@@ -912,7 +997,10 @@ namespace ScreenLens.WinUI.Views.Capture
             }
             if (e.Key == Windows.System.VirtualKey.Escape)
             {
-                CloseAfterHidingOverlay();
+                if (_annotationMode is not null)
+                    SetAnnotationMode(null);
+                else
+                    CloseAfterHidingOverlay();
             }
             else if (e.Key == Windows.System.VirtualKey.Enter)
             {
@@ -944,6 +1032,7 @@ namespace ScreenLens.WinUI.Views.Capture
             if (_freeformSelection) UpdateFreeformLine();
             else _freeformGlow?.Clear();
             var has = _sel.Width >= MinSize && _sel.Height >= MinSize;
+            UpdateAnnotationButtonStates();
             var vis = has ? Visibility.Visible : Visibility.Collapsed;
             SelBorder.Visibility = _freeformSelection && !_vm.FreeformBorderEnabled
                 ? Visibility.Collapsed : vis;
@@ -1368,7 +1457,8 @@ namespace ScreenLens.WinUI.Views.Capture
                 ? _freeformPoints.Select(p => new Point(
                     p.X * scaleX - px, p.Y * scaleY - py)).ToArray()
                 : null;
-            return await _shot.CropToPngAsync(px, py, pw, ph, maskPolygon);
+            var annotations = GetCaptureAnnotations(scaleX, scaleY, px, py);
+            return await _shot.CropToPngAsync(px, py, pw, ph, maskPolygon, annotations);
         }
 
         private (int X, int Y, int Width, int Height) SelectionCropPixels()
@@ -1410,6 +1500,7 @@ namespace ScreenLens.WinUI.Views.Capture
             _toolbarMonitor = null;
             _toolbarManuallyPositioned = false;
             _freeformPoints.Clear();
+            ClearAnnotations();
             FreeformLine.Visibility = Visibility.Collapsed;
             ApplySelection();
         }
@@ -1424,6 +1515,7 @@ namespace ScreenLens.WinUI.Views.Capture
             _cancelCloseRequested = true;
             _rectangleEdit = SelectionEdit.None;
             _dragging = false;
+            _freeformMoving = false;
             _topmostRetryTimer?.Stop();
             _captureActivationPending = false;
 

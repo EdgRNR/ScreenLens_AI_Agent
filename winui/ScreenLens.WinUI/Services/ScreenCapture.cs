@@ -12,6 +12,16 @@ using Windows.Storage.Streams;
 
 namespace ScreenLens.WinUI.Services
 {
+    public enum CaptureAnnotationKind
+    {
+        Rectangle,
+        Ellipse,
+    }
+
+    public readonly record struct CaptureAnnotation(
+        CaptureAnnotationKind Kind, int X, int Y, int Width, int Height,
+        int StrokeWidth);
+
     /// <summary>
     /// 一张覆盖所有显示器的虚拟桌面截图（GDI BitBlt 捕获，BGRA8）。
     /// 选区确认后按需裁剪编码为 PNG；用完即释放，不长期驻留内存。
@@ -54,7 +64,8 @@ namespace ScreenLens.WinUI.Services
 
         /// <summary>把指定物理像素区域裁剪并编码为 PNG。</summary>
         public async Task<byte[]?> CropToPngAsync(int x, int y, int w, int h,
-            IReadOnlyList<Point>? maskPolygon = null)
+            IReadOnlyList<Point>? maskPolygon = null,
+            IReadOnlyList<CaptureAnnotation>? annotations = null)
         {
             if (_bgra.Length == 0 || Width <= 0 || Height <= 0
                 || x >= Width || y >= Height || w <= 0 || h <= 0)
@@ -73,10 +84,12 @@ namespace ScreenLens.WinUI.Services
                     crop, row * dstStride, dstStride);
             }
 
+            byte[]? original = null;
+
             // 自由圈选：把多边形外像素设成白色，保留背景纹理的圈选内文字。
             if (maskPolygon is { Count: >= 3 })
             {
-                var original = new byte[crop.Length];
+                original = new byte[crop.Length];
                 System.Buffer.BlockCopy(crop, 0, original, 0, crop.Length);
                 Array.Fill(crop, (byte)0xFF);
                 for (var py = 0; py < h; py++)
@@ -106,6 +119,9 @@ namespace ScreenLens.WinUI.Services
                 }
             }
 
+            if (annotations is { Count: > 0 })
+                DrawAnnotations(crop, w, h, annotations);
+
             // GDI 是 BGRX；SoftwareBitmap Bgra8 通道顺序一致（BGRA）
             var sb = SoftwareBitmap.CreateCopyFromBuffer(
                 crop.AsBuffer(), BitmapPixelFormat.Bgra8, w, h);
@@ -121,6 +137,64 @@ namespace ScreenLens.WinUI.Services
             await reader.LoadAsync((uint)size);
             reader.ReadBytes(bytes);
             return bytes;
+        }
+
+        private static void DrawAnnotations(byte[] pixels, int width, int height,
+            IReadOnlyList<CaptureAnnotation> annotations)
+        {
+            foreach (var annotation in annotations)
+            {
+                var left = Math.Clamp(annotation.X, 0, width - 1);
+                var top = Math.Clamp(annotation.Y, 0, height - 1);
+                var right = Math.Clamp(annotation.X + annotation.Width, 0, width - 1);
+                var bottom = Math.Clamp(annotation.Y + annotation.Height, 0, height - 1);
+                if (right <= left || bottom <= top) continue;
+
+                var stroke = Math.Max(1, annotation.StrokeWidth);
+                for (var py = top; py <= bottom; py++)
+                {
+                    for (var px = left; px <= right; px++)
+                    {
+                        var distance = annotation.Kind == CaptureAnnotationKind.Rectangle
+                            ? RectangleEdgeDistance(px, py, left, top, right, bottom)
+                            : EllipseEdgeDistance(px, py, left, top, right, bottom);
+                        var alpha = Math.Clamp(1.0 - distance / stroke, 0, 1);
+                        if (alpha > 0) BlendPixel(pixels, width, px, py,
+                            (byte)Math.Round(220 * alpha), 255, 82, 82);
+                    }
+                }
+            }
+        }
+
+        private static double RectangleEdgeDistance(int x, int y,
+            int left, int top, int right, int bottom)
+        {
+            var edge = Math.Min(Math.Min(x - left, right - x),
+                Math.Min(y - top, bottom - y));
+            return Math.Max(0, edge);
+        }
+
+        private static double EllipseEdgeDistance(int x, int y,
+            int left, int top, int right, int bottom)
+        {
+            var cx = (left + right) / 2.0;
+            var cy = (top + bottom) / 2.0;
+            var rx = Math.Max(0.5, (right - left) / 2.0);
+            var ry = Math.Max(0.5, (bottom - top) / 2.0);
+            var radius = Math.Sqrt(Math.Pow((x - cx) / rx, 2)
+                + Math.Pow((y - cy) / ry, 2));
+            return Math.Abs(radius - 1) * Math.Min(rx, ry);
+        }
+
+        private static void BlendPixel(byte[] pixels, int width, int x, int y,
+            byte alpha, byte red, byte green, byte blue)
+        {
+            var index = (y * width + x) * 4;
+            var inverse = 255 - alpha;
+            pixels[index] = (byte)((pixels[index] * inverse + blue * alpha) / 255);
+            pixels[index + 1] = (byte)((pixels[index + 1] * inverse + green * alpha) / 255);
+            pixels[index + 2] = (byte)((pixels[index + 2] * inverse + red * alpha) / 255);
+            pixels[index + 3] = 255;
         }
     }
 
