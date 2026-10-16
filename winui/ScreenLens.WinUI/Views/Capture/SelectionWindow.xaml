@@ -3,20 +3,36 @@
     x:Class="ScreenLens.WinUI.Views.Capture.SelectionWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ScreenLens.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
     <!-- 截图选区覆盖层：覆盖整个虚拟桌面，支持在任意显示器上选区 -->
-    <Grid x:Name="Root" Background="Black"
+    <controls:CaptureSurface x:Name="Root" Background="Black"
           KeyDown="OnRootKeyDown"
           PointerPressed="OnPointerPressed"
           PointerMoved="OnPointerMoved"
           PointerReleased="OnPointerReleased"
+          PointerExited="OnSurfacePointerExited"
           PointerCanceled="OnSelectionPointerCanceled"
           PointerCaptureLost="OnSelectionPointerCanceled">
 
+        <controls:CaptureSurface.Resources>
+            <Style x:Key="RectangleSelectionHandleStyle" TargetType="Border">
+                <Setter Property="BorderBrush" Value="{ThemeResource ScreenLensAccentBrush}" />
+            </Style>
+        </controls:CaptureSurface.Resources>
+
         <Image x:Name="ShotImage" Stretch="Fill" />
+
+        <!-- Grid cannot retain keyboard focus. Keep it off the size editors until explicitly clicked. -->
+        <Button x:Name="SelectionFocusTarget"
+                 AutomationProperties.Name="截图选区"
+                 Width="1" Height="1" Opacity="0"
+                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                 IsTabStop="True" IsHitTestVisible="False"
+                 UseSystemFocusVisuals="False" />
 
         <!-- 单一偶奇填充遮罩，在选区矩形处挖空，避免多块矩形在高 DPI 下接缝/错位。 -->
         <Path x:Name="DimMask"
@@ -44,8 +60,12 @@
                 Background="Transparent"
                 Visibility="Collapsed" />
 
+        <!-- Eight reused handles; hit testing is resolved in Root, never in the exported image. -->
+        <Canvas x:Name="SelectionHandles" IsHitTestVisible="False" Visibility="Collapsed" />
+
         <!-- 选区完成后显示的尺寸编辑与操作工具条 -->
         <Border x:Name="Toolbar"
+                PointerEntered="OnSelectionControlsPointerEntered"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 Background="{ThemeResource CaptureToolbarBgBrush}"
@@ -153,6 +173,7 @@
 
         <!-- 错误提示在当前操作的显示器内居中；长消息在该屏范围内滚动。 -->
         <Grid x:Name="ErrorRegion"
+              PointerEntered="OnSelectionControlsPointerEntered"
               HorizontalAlignment="Left"
               VerticalAlignment="Top"
               Visibility="Collapsed">
@@ -190,5 +211,5 @@
                 </StackPanel>
             </Grid>
         </Grid>
-    </Grid>
+    </controls:CaptureSurface>
 </Window>

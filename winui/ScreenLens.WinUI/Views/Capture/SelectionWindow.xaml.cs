@@ -119,6 +119,7 @@ namespace ScreenLens.WinUI.Views.Capture
             _captureAction = captureAction;
             _freeformSelection = _vm.LeftCaptureMode == 1;
             InitializeComponent();
+            InitializeRectangleHandles();
             Closed += (_, _) =>
             {
                 // Keep the frozen desktop intact until the overlay is off
@@ -134,6 +135,7 @@ namespace ScreenLens.WinUI.Views.Capture
                 _presentationClosed.TrySetResult(true);
                 _topmostRetryTimer?.Stop();
                 _topmostRetryTimer = null;
+                Root.Dispose();
             };
             _dimGeometry.Children.Add(_screenGeometry);
             _dimGeometry.Children.Add(_selectionGeometry);
@@ -154,7 +156,7 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 try
                 {
-                    Root.Focus(FocusState.Programmatic);
+                    SelectionFocusTarget.Focus(FocusState.Programmatic);
                     App.WriteLifecycleLog($"截图选区已布局：virtualOrigin=({_shot.OriginX},{_shot.OriginY}), pixels={_shot.Width}x{_shot.Height}, dips={Root.ActualWidth:F1}x{Root.ActualHeight:F1}, pixelScale=({PixelScaleX:F3},{PixelScaleY:F3}), hwnd={WindowBounds}");
                     CreateMonitorHints();
                     PositionCaptureFeedback();
@@ -712,14 +714,17 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            if (_dragging || BusyOverlay.Visibility == Visibility.Visible) return;
+            if (_dragging || _rectangleEdit != SelectionEdit.None || _confirmed
+                || _imageActionBusy || BusyOverlay.Visibility == Visibility.Visible) return;
             if (IsWithinSelectionControls(e.OriginalSource as DependencyObject)) return;
+            if (TryBeginRectangleEdit(e)) return;
             var p = e.GetCurrentPoint(Root);
             var update = p.Properties.PointerUpdateKind;
             if (update != Microsoft.UI.Input.PointerUpdateKind.LeftButtonPressed
                 && update != Microsoft.UI.Input.PointerUpdateKind.RightButtonPressed) return;
 
             _selectionUsesRightButton = update == Microsoft.UI.Input.PointerUpdateKind.RightButtonPressed;
+            SelectionFocusTarget.Focus(FocusState.Programmatic);
             _selectionPointerId = e.Pointer.PointerId;
             _freeformSelection = (_selectionUsesRightButton
                 ? _vm.RightCaptureMode : _vm.LeftCaptureMode) == 1;
@@ -747,6 +752,21 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
         {
+            if (_rectangleEdit != SelectionEdit.None)
+            {
+                if (e.Pointer.PointerId == _selectionPointerId)
+                {
+                    MoveRectangleEdit(e.GetCurrentPoint(Root).Position);
+                    e.Handled = true;
+                }
+                return;
+            }
+            if (!_dragging)
+            {
+                UpdateRectangleCursor(e.GetCurrentPoint(Root).Position,
+                    IsWithinSelectionControls(e.OriginalSource as DependencyObject));
+                return;
+            }
             if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
             var p = e.GetCurrentPoint(Root);
             _lastPointerPosition = p.Position;
@@ -776,6 +796,13 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
         {
+            if (_rectangleEdit != SelectionEdit.None)
+            {
+                if (e.Pointer.PointerId == _selectionPointerId
+                    && !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)
+                    FinishRectangleEdit(e, cancelled: false);
+                return;
+            }
             if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
             var point = e.GetCurrentPoint(Root);
             // Releasing the other button must not finish the current stroke.
@@ -833,6 +860,12 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private void OnSelectionPointerCanceled(object sender, PointerRoutedEventArgs e)
         {
+            if (_rectangleEdit != SelectionEdit.None)
+            {
+                if (e.Pointer.PointerId == _selectionPointerId)
+                    FinishRectangleEdit(e, cancelled: true);
+                return;
+            }
             if (!_dragging || e.Pointer.PointerId != _selectionPointerId) return;
             _dragging = false;
             Root.ReleasePointerCapture(e.Pointer);
@@ -854,6 +887,13 @@ namespace ScreenLens.WinUI.Views.Capture
                 }
                 return;
             }
+            if ((_dragging || _rectangleEdit != SelectionEdit.None || _imageActionBusy)
+                && e.Key != Windows.System.VirtualKey.Escape)
+            {
+                e.Handled = true;
+                return;
+            }
+            if (TryNudgeRectangle(e)) return;
             if (e.OriginalSource is not TextBox
                 && (GetKeyState(0x11) & 0x8000) != 0)
             {
@@ -908,6 +948,7 @@ namespace ScreenLens.WinUI.Views.Capture
             SelBorder.Visibility = _freeformSelection && !_vm.FreeformBorderEnabled
                 ? Visibility.Collapsed : vis;
             DimMask.Visibility = _vm.CaptureDimMaskEnabled ? vis : Visibility.Collapsed;
+            UpdateRectangleHandles();
             if (!has)
             {
                 return;
@@ -1121,7 +1162,9 @@ namespace ScreenLens.WinUI.Views.Capture
                     // press is transitioning from TextBox focus to its Click.
                     DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                     {
-                        if (Toolbar.Visibility == Visibility.Visible)
+                        if (Toolbar.Visibility == Visibility.Visible
+                            && _rectangleEdit == SelectionEdit.None && !_dragging
+                            && !_cancelCloseRequested)
                             PlaceSelectionControls();
                     });
                 }
@@ -1206,11 +1249,15 @@ namespace ScreenLens.WinUI.Views.Capture
             _toolbarManuallyPositioned = false;
             SyncDimensionInputs();
             PlaceSelectionControls();
+            UpdateRectangleHandles();
+            SelectionFocusTarget.Focus(FocusState.Programmatic);
         }
 
         private void HideToolbar()
         {
             Toolbar.Visibility = Visibility.Collapsed;
+            SelectionHandles.Visibility = Visibility.Collapsed;
+            Root.SetCursorShape(Microsoft.UI.Input.InputSystemCursorShape.Arrow);
         }
 
         // -------------------------------------------------------- 确认/取消
@@ -1283,9 +1330,12 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private async Task RunImageActionAsync(Func<byte[], Task> action)
         {
-            if (_imageActionBusy) return;
+            if (_imageActionBusy || _confirmed || _dragging
+                || _rectangleEdit != SelectionEdit.None
+                || _sel.Width < MinSize || _sel.Height < MinSize) return;
             _imageActionBusy = true;
             CommitDimensionEdits();
+            UpdateRectangleHandles();
             SetImageActionEnabled(false);
             try
             {
@@ -1305,6 +1355,7 @@ namespace ScreenLens.WinUI.Views.Capture
             {
                 SetImageActionEnabled(true);
                 _imageActionBusy = false;
+                if (!_cancelCloseRequested) UpdateRectangleHandles();
             }
         }
 
@@ -1312,15 +1363,25 @@ namespace ScreenLens.WinUI.Views.Capture
         {
             var scaleX = PixelScaleX;
             var scaleY = PixelScaleY;
-            var px = (int)(_sel.X * scaleX);
-            var py = (int)(_sel.Y * scaleY);
-            var pw = (int)Math.Ceiling(_sel.Width * scaleX);
-            var ph = (int)Math.Ceiling(_sel.Height * scaleY);
+            var (px, py, pw, ph) = SelectionCropPixels();
             var maskPolygon = _freeformSelection
                 ? _freeformPoints.Select(p => new Point(
                     p.X * scaleX - px, p.Y * scaleY - py)).ToArray()
                 : null;
             return await _shot.CropToPngAsync(px, py, pw, ph, maskPolygon);
+        }
+
+        private (int X, int Y, int Width, int Height) SelectionCropPixels()
+        {
+            if (!_freeformSelection)
+            {
+                // Keep physical-pixel nudges exact after the DIP round trip.
+                var rect = RectanglePixels;
+                return ((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
+            }
+            return ((int)(_sel.X * PixelScaleX), (int)(_sel.Y * PixelScaleY),
+                (int)Math.Ceiling(_sel.Width * PixelScaleX),
+                (int)Math.Ceiling(_sel.Height * PixelScaleY));
         }
 
         private void SetImageActionEnabled(bool enabled)
@@ -1361,6 +1422,8 @@ namespace ScreenLens.WinUI.Views.Capture
             if (_cancelCloseRequested)
                 return;
             _cancelCloseRequested = true;
+            _rectangleEdit = SelectionEdit.None;
+            _dragging = false;
             _topmostRetryTimer?.Stop();
             _captureActivationPending = false;
 
@@ -1380,7 +1443,9 @@ namespace ScreenLens.WinUI.Views.Capture
 
         private async Task ConfirmSelectionAsync()
         {
-            if (_confirmed) return;
+            if (_confirmed || _imageActionBusy || _dragging
+                || _rectangleEdit != SelectionEdit.None
+                || _sel.Width < MinSize || _sel.Height < MinSize) return;
             _confirmed = true;
             _freeformGlow?.Freeze();
             HideToolbar();
@@ -1392,10 +1457,7 @@ namespace ScreenLens.WinUI.Views.Capture
             // 客户区逻辑坐标 → 虚拟桌面截图像素坐标。
             var scaleX = PixelScaleX;
             var scaleY = PixelScaleY;
-            var px = (int)(_sel.X * scaleX);
-            var py = (int)(_sel.Y * scaleY);
-            var pw = (int)Math.Ceiling(_sel.Width * scaleX);
-            var ph = (int)Math.Ceiling(_sel.Height * scaleY);
+            var (px, py, pw, ph) = SelectionCropPixels();
 
             BusyOverlay.Visibility = Visibility.Visible;
             BusyText.Text = "正在识别…";
