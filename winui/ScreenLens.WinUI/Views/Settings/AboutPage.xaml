@@ -44,7 +44,7 @@
                           Foreground="{ThemeResource AppTextSecondaryBrush}" />
                 <TextBlock Grid.Column="1" Text="当前版本" Style="{StaticResource CardTitleText}"
                            VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="v1.0.0" Style="{StaticResource CardTitleText}"
+                <TextBlock Grid.Column="2" Text="v1.0.1" Style="{StaticResource CardTitleText}"
                            HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
         </Border>

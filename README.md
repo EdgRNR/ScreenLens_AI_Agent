@@ -5,7 +5,7 @@
 <h1 align="center">ScreenLens</h1>
 
 <p align="center">自由圈选屏幕内容，本地识别文字，按需复制或翻译。</p>
-<p align="center"><strong>v1.0.0 · Windows x64 · WinUI 3 · 离线 OCR</strong></p>
+<p align="center"><strong>v1.0.1 · Windows x64 · WinUI 3 · 离线 OCR</strong></p>
 
 ScreenLens 是一款 Windows 桌面截图、文字识别与翻译工具。通过全局快捷键呼出截图界面，使用自由圈选或矩形选区获取内容，再选择复制图像、保存图像或识别文字。识别在本机完成，翻译按需连接所选在线服务。
 
@@ -46,7 +46,7 @@ ScreenLens 是一款 Windows 桌面截图、文字识别与翻译工具。通过
 
 ## 软件截图
 
-以下为实际运行的 WinUI v1.0.0 界面截图。OCR 示例来自仓库中的[中英日测试图片](tests/data/ocr_test.png)，由本地 C# OCR worker 实际识别。
+以下为实际运行的 WinUI 界面截图。OCR 示例来自仓库中的[中英日测试图片](tests/data/ocr_test.png)，由本地 C# OCR worker 实际识别。
 
 ### 识别结果
 

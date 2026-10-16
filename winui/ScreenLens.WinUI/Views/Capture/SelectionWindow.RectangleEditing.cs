@@ -62,9 +62,18 @@ public sealed partial class SelectionWindow
         }
     }
 
-    private SelectionEdit HitTestRectangle(Point point) => RectangleEditable
-        ? RectangleSelectionEditor.HitTest(RectangleBounds, point.X, point.Y, 8)
-        : SelectionEdit.None;
+    private SelectionEdit HitTestRectangle(Point point)
+    {
+        if (!RectangleEditable) return SelectionEdit.None;
+
+        var part = RectangleSelectionEditor.HitTest(
+            RectangleBounds, point.X, point.Y, 8);
+        // Once an annotation exists, the rectangle's interior is reserved for
+        // moving that annotation. Keep the handles usable, but do not move the
+        // whole screenshot selection from its blank area.
+        return _annotations.Count > 0 && part == SelectionEdit.Move
+            ? SelectionEdit.None : part;
+    }
 
     private void UpdateRectangleCursor(Point point, bool overControls = false)
     {

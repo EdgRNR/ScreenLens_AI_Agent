@@ -982,6 +982,12 @@ namespace ScreenLens.WinUI.Views.Capture
             if (e.OriginalSource is not TextBox
                 && (GetKeyState(0x11) & 0x8000) != 0)
             {
+                if (e.Key == Windows.System.VirtualKey.Z
+                    && TryUndoLastAnnotation())
+                {
+                    e.Handled = true;
+                    return;
+                }
                 if (e.Key == Windows.System.VirtualKey.C)
                 {
                     _ = RunImageActionAsync(async png => await CopyImageToClipboardAsync(png));

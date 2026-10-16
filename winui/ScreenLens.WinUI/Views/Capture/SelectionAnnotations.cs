@@ -267,6 +267,20 @@ public sealed partial class SelectionWindow
         UpdateAnnotationButtonStates();
     }
 
+    private bool TryUndoLastAnnotation()
+    {
+        if (_annotations.Count == 0 || _annotationDragging || _annotationMoving)
+            return false;
+
+        _annotations.RemoveAt(_annotations.Count - 1);
+        RenderAnnotations();
+        UpdateAnnotationButtonStates();
+        PlaceSelectionControls();
+        UpdateRectangleHandles();
+        UpdateRectangleCursor(_lastPointerPosition);
+        return true;
+    }
+
     private IReadOnlyList<CaptureAnnotation> GetCaptureAnnotations(
         double scaleX, double scaleY, int cropX, int cropY)
     {
